@@ -27,8 +27,6 @@ export async function GET(request: Request) {
     return NextResponse.json(data)
   }
 
-  const supabase = await createClient()
-
   let query = supabase
     .from("listings")
     .select("*, items(*), users(id, username, profile_picture)")
