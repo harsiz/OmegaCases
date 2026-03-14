@@ -12,7 +12,7 @@ export async function GET(request: Request) {
   const maxPrice = searchParams.get("maxPrice")
   const search = searchParams.get("search")
   const sortBy = searchParams.get("sortBy") || "created_at"
-  const sortDir = searchParams.get("sortDir") === "asc" ? true : false
+  const sortDir = searchParams.get("sortDir") === "asc"
 
   const supabase = await createClient()
 
@@ -27,15 +27,12 @@ export async function GET(request: Request) {
     return NextResponse.json(data)
   }
 
-  const supabase = await createClient()
-
   let query = supabase
     .from("listings")
     .select("*, items(*), users(id, username, profile_picture)")
     .eq("status", "active")
     .order(sortBy === "price" ? "price" : "created_at", { ascending: sortDir })
 
-  if (rarity) query = query.eq("items.rarity", rarity)
   if (minPrice) query = query.gte("price", parseFloat(minPrice))
   if (maxPrice) query = query.lte("price", parseFloat(maxPrice))
 
@@ -57,11 +54,13 @@ export async function GET(request: Request) {
 
 // POST: Create listing
 export async function POST(request: Request) {
-  const { seller_id, inventory_id, item_id, price } = await request.json()
-  const supabase = await createClient()
+  const body = await request.json()
+  const { seller_id, inventory_id, item_id, price } = body
+
+  const sb = await createClient()
 
   // Verify inventory ownership
-  const { data: inv } = await supabase
+  const { data: inv } = await sb
     .from("inventory")
     .select("*")
     .eq("id", inventory_id)
@@ -78,7 +77,7 @@ export async function POST(request: Request) {
   }
 
   // Check not already listed
-  const { data: existing } = await supabase
+  const { data: existing } = await sb
     .from("listings")
     .select("id")
     .eq("inventory_id", inventory_id)
@@ -87,7 +86,7 @@ export async function POST(request: Request) {
 
   if (existing) return NextResponse.json({ error: "Item already listed" }, { status: 400 })
 
-  const { data, error } = await supabase
+  const { data, error } = await sb
     .from("listings")
     .insert({ seller_id, item_id, inventory_id, price })
     .select("*")
