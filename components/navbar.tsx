@@ -117,6 +117,13 @@ export default function Navbar() {
                   >
                     My Inventory
                   </MenuItem>
+                  <MenuItem
+                    component={NextLink}
+                    href="/settings"
+                    onClick={handleCloseMenu}
+                  >
+                    Settings
+                  </MenuItem>
                   {user.admin && (
                     <MenuItem component={NextLink} href="/admin" onClick={handleCloseMenu}>
                       Admin Panel
@@ -186,6 +193,15 @@ export default function Navbar() {
                     onClick={() => setMobileOpen(false)}
                   >
                     <ListItemText primary="My Inventory" />
+                  </ListItemButton>
+                </ListItem>
+                <ListItem disablePadding>
+                  <ListItemButton
+                    component={NextLink}
+                    href="/settings"
+                    onClick={() => setMobileOpen(false)}
+                  >
+                    <ListItemText primary="Settings" />
                   </ListItemButton>
                 </ListItem>
                 {user.admin && (
