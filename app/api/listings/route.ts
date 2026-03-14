@@ -14,11 +14,11 @@ export async function GET(request: Request) {
   const sortBy = searchParams.get("sortBy") || "created_at"
   const sortDir = searchParams.get("sortDir") === "asc"
 
-  const supabase = await createClient()
+  const db = createClient()
 
   // Single listing fetch for /listing/[id] page
   if (id) {
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from("listings")
       .select("*, items(*), users(id, username, profile_picture)")
       .eq("id", id)
@@ -27,7 +27,7 @@ export async function GET(request: Request) {
     return NextResponse.json(data)
   }
 
-  let query = supabase
+  let query = db
     .from("listings")
     .select("*, items(*), users(id, username, profile_picture)")
     .eq("status", "active")
@@ -57,10 +57,9 @@ export async function POST(request: Request) {
   const body = await request.json()
   const { seller_id, inventory_id, item_id, price } = body
 
-  const sb = await createClient()
+  const db = createClient()
 
-  // Verify inventory ownership
-  const { data: inv } = await sb
+  const { data: inv } = await db
     .from("inventory")
     .select("*")
     .eq("id", inventory_id)
@@ -76,8 +75,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Price must be greater than 0" }, { status: 400 })
   }
 
-  // Check not already listed
-  const { data: existing } = await sb
+  const { data: existing } = await db
     .from("listings")
     .select("id")
     .eq("inventory_id", inventory_id)
@@ -86,7 +84,7 @@ export async function POST(request: Request) {
 
   if (existing) return NextResponse.json({ error: "Item already listed" }, { status: 400 })
 
-  const { data, error } = await sb
+  const { data, error } = await db
     .from("listings")
     .insert({ seller_id, item_id, inventory_id, price })
     .select("*")
