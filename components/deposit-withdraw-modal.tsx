@@ -186,8 +186,9 @@ export default function DepositWithdrawModal({ open, onClose }: Props) {
               variant="contained"
               onClick={handleDeposit}
               disabled={depositLoading}
-              startIcon={depositLoading ? <CircularProgress size={16} /> : null}
+              sx={{ display: "flex", gap: 1, alignItems: "center" }}
             >
+              {depositLoading && <CircularProgress size={16} sx={{ color: "inherit" }} />}
               {depositLoading ? "Generating..." : "Generate Wallet Address"}
             </Button>
             <Typography variant="caption" color="text.secondary">
@@ -247,8 +248,9 @@ export default function DepositWithdrawModal({ open, onClose }: Props) {
               variant="contained"
               onClick={handleWithdraw}
               disabled={withdrawLoading}
-              startIcon={withdrawLoading ? <CircularProgress size={16} /> : null}
+              sx={{ display: "flex", gap: 1, alignItems: "center" }}
             >
+              {withdrawLoading && <CircularProgress size={16} sx={{ color: "inherit" }} />}
               {withdrawLoading ? "Submitting..." : "Request Withdrawal"}
             </Button>
             <Typography variant="caption" color="text.secondary">
