@@ -3,7 +3,6 @@ import { createClient } from "@/lib/supabase/server"
 
 const CONFIRMED_STATUSES = ["finished", "confirmed", "complete", "partially_paid"]
 
-// NOWPayments IPN webhook
 export async function POST(request: Request) {
   let body: any
   try {
@@ -12,80 +11,89 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true })
   }
 
+  console.log("[v0] NOWPayments webhook received:", JSON.stringify(body))
+
   const { payment_id, payment_status, price_amount, actually_paid, order_id } = body
 
-  // Only credit on confirmed statuses
   if (!CONFIRMED_STATUSES.includes(payment_status)) {
+    console.log("[v0] Webhook status not confirmed:", payment_status)
     return NextResponse.json({ ok: true })
   }
 
-  const supabase = await createClient()
+  const supabase = createClient()
 
-  // Try finding deposit by payment_id first, fallback to order_id
   let deposit: any = null
 
-  const { data: byPaymentId } = await supabase
-    .from("deposits")
-    .select("*")
-    .eq("payment_id", String(payment_id))
-    .maybeSingle()
-
-  if (byPaymentId) {
-    deposit = byPaymentId
-  } else if (order_id) {
-    // order_id format: oc_{user_id}_{timestamp}
-    const { data: byOrderId } = await supabase
+  // 1. Try by payment_id (most reliable)
+  if (payment_id) {
+    const { data } = await supabase
       .from("deposits")
       .select("*")
       .eq("payment_id", String(payment_id))
       .maybeSingle()
-    deposit = byOrderId
+    deposit = data
+    console.log("[v0] Lookup by payment_id:", payment_id, "->", deposit?.id ?? "not found")
+  }
 
-    // Last resort: match by user_id from order_id + pending status
-    if (!deposit && typeof order_id === "string" && order_id.startsWith("oc_")) {
-      const parts = order_id.split("_")
-      const userId = parts[1]
-      const { data: byUser } = await supabase
-        .from("deposits")
-        .select("*")
-        .eq("user_id", userId)
-        .eq("status", "pending")
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle()
-      deposit = byUser
-    }
+  // 2. Fallback: extract user_id from order_id (format: oc_{user_id}_{timestamp})
+  if (!deposit && typeof order_id === "string" && order_id.startsWith("oc_")) {
+    const parts = order_id.split("_")
+    // order_id = "oc_<uuid>_<timestamp>" — uuid contains hyphens so rejoin middle parts
+    // parts[0]="oc", parts[1..5]=uuid segments, last=timestamp
+    const userId = parts.slice(1, -1).join("_")
+    console.log("[v0] Fallback lookup by user_id from order_id:", userId)
+    const { data } = await supabase
+      .from("deposits")
+      .select("*")
+      .eq("user_id", userId)
+      .eq("status", "pending")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    deposit = data
+    console.log("[v0] Fallback by user_id ->", deposit?.id ?? "not found")
   }
 
   if (!deposit) {
+    console.log("[v0] No matching deposit found, ignoring webhook")
     return NextResponse.json({ ok: true })
   }
 
-  // Already confirmed — skip to avoid double credit
   if (deposit.status === "confirmed") {
+    console.log("[v0] Deposit already confirmed, skipping:", deposit.id)
     return NextResponse.json({ ok: true })
   }
 
   const creditAmount = Number(actually_paid || price_amount || deposit.amount_usd)
+  console.log("[v0] Crediting user:", deposit.user_id, "amount:", creditAmount)
 
   const { data: user } = await supabase
     .from("users")
-    .select("balance, username")
+    .select("balance")
     .eq("id", deposit.user_id)
     .single()
 
-  if (!user) return NextResponse.json({ ok: true })
+  if (!user) {
+    console.log("[v0] User not found:", deposit.user_id)
+    return NextResponse.json({ ok: true })
+  }
 
-  await Promise.all([
+  const newBalance = Number(user.balance) + creditAmount
+  console.log("[v0] Updating balance from", user.balance, "to", newBalance)
+
+  const [userUpdate, depositUpdate] = await Promise.all([
     supabase
       .from("users")
-      .update({ balance: Number(user.balance) + creditAmount })
+      .update({ balance: newBalance })
       .eq("id", deposit.user_id),
     supabase
       .from("deposits")
       .update({ status: "confirmed", amount_usd: creditAmount })
       .eq("id", deposit.id),
   ])
+
+  console.log("[v0] User update error:", userUpdate.error?.message ?? "none")
+  console.log("[v0] Deposit update error:", depositUpdate.error?.message ?? "none")
 
   return NextResponse.json({ ok: true })
 }
