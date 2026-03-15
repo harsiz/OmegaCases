@@ -17,7 +17,7 @@ import type { Item, Rarity } from "@/lib/types"
 import { RARITY_COLORS, CASE_PRICES } from "@/lib/types"
 import NextLink from "next/link"
 
-const CONFETTI_RARITIES: Rarity[] = ["Rare", "Legendary", "Omega"]
+const CONFETTI_RARITIES: Rarity[] = ["Legendary", "Omega"]
 const CONFETTI_SRC = "https://hebbkx1anhila5yf.public.blob.vercel-storage.com/confetti-pop-sound-fNcAXWXi7MdyVXwS9yqsN7dqp9PhVx.mp3"
 const BORING_SRC = "https://hebbkx1anhila5yf.public.blob.vercel-storage.com/boring-pop-pVmE2X5VYDLMLvcrduACPs958KNNxL.mp3"
 

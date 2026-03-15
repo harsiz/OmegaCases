@@ -5,8 +5,8 @@ import Navbar from '@/components/navbar'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'OmegaCases — Open Cases, Win Rare Items',
-  description: 'OmegaCases is a CS2-style case opening economy website. Open cases, win rare skins, trade on the marketplace.',
+  title: 'OmegaCases - The best case opening website.. of all time 🤤',
+  description: 'OmegaCases is a website where you can like open cases and win rare items and sell. u can also like buy low sell high xdxd',
   generator: 'v0.app',
   icons: {
     icon: 'https://hebbkx1anhila5yf.public.blob.vercel-storage.com/omegacrate_logo-tJzRwAfwpZAQEkJOSjQGI93l5hRU06.png',
