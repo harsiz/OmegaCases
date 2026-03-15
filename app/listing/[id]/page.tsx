@@ -4,24 +4,12 @@ import { useState, useEffect } from "react"
 import { useParams, useRouter } from "next/navigation"
 import NextLink from "next/link"
 import dynamic from "next/dynamic"
-import {
-  Container, Box, Typography, Card, CardMedia, Chip, Button,
-  CircularProgress, Alert, Divider, Avatar, Grid,
-} from "@mui/material"
-import ArrowBackIcon from "@mui/icons-material/ArrowBack"
-import ShoppingCartIcon from "@mui/icons-material/ShoppingCart"
 import { useAuth } from "@/lib/auth-context"
 import { RARITY_COLORS } from "@/lib/types"
 import type { Listing, Sale, Rarity } from "@/lib/types"
 
-// Lazy-load Recharts to avoid Turbopack chunk-load errors on client navigation
-const LineChart = dynamic(() => import("recharts").then((m) => m.LineChart), { ssr: false })
-const Line = dynamic(() => import("recharts").then((m) => m.Line), { ssr: false })
-const XAxis = dynamic(() => import("recharts").then((m) => m.XAxis), { ssr: false })
-const YAxis = dynamic(() => import("recharts").then((m) => m.YAxis), { ssr: false })
-const Tooltip = dynamic(() => import("recharts").then((m) => m.Tooltip), { ssr: false })
-const ResponsiveContainer = dynamic(() => import("recharts").then((m) => m.ResponsiveContainer), { ssr: false })
-const CartesianGrid = dynamic(() => import("recharts").then((m) => m.CartesianGrid), { ssr: false })
+// Single dynamic import for the whole chart — avoids Turbopack multi-chunk split errors
+const SalesPriceChart = dynamic(() => import("@/components/sales-price-chart"), { ssr: false })
 
 export default function ListingPage() {
   const { id } = useParams<{ id: string }>()
@@ -124,33 +112,7 @@ export default function ListingPage() {
                 <Typography color="text.secondary">No sales history yet.</Typography>
               </Box>
             ) : (
-              <ResponsiveContainer width="100%" height={280}>
-                <LineChart data={chartData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f4f8" />
-                  <XAxis
-                    dataKey="date"
-                    tick={{ fontSize: 11 }}
-                    interval="preserveStartEnd"
-                  />
-                  <YAxis
-                    tick={{ fontSize: 11 }}
-                    tickFormatter={(v) => `$${v}`}
-                    domain={["auto", "auto"]}
-                  />
-                  <Tooltip
-                    formatter={(v: any) => [`$${Number(v).toFixed(2)}`, "Sale Price"]}
-                    labelFormatter={(l) => `Date: ${l}`}
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="price"
-                    stroke="#1976d2"
-                    strokeWidth={2}
-                    dot={{ r: 3, fill: "#1976d2" }}
-                    activeDot={{ r: 5 }}
-                  />
-                </LineChart>
-              </ResponsiveContainer>
+              <SalesPriceChart data={chartData} color="#1976d2" />
             )}
 
             {sales.length > 0 && (
