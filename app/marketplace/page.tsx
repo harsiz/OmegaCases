@@ -23,10 +23,10 @@ const MAX_LISTING_PRICE = 800
 const STORAGE_KEY = "omegacases_marketplace_filters"
 
 const RARITY_PRICE_CAPS: Record<string, number> = {
-  Common: 0.04,
-  Uncommon: 0.10,
-  Rare: 0.40,
-  Legendary: 2.00,
+  Common: 0.10,
+  Uncommon: 0.50,
+  Rare: 1.00,
+  Legendary: 10.00,
   Omega: MAX_LISTING_PRICE,
 }
 
@@ -83,6 +83,7 @@ export default function MarketplacePage() {
   // Sell dialog
   const [sellOpen, setSellOpen] = useState(false)
   const [myInventory, setMyInventory] = useState<InventoryItem[]>([])
+  const [myInventoryLoading, setMyInventoryLoading] = useState(false)
   // Step 1: show unique items; Step 2: show copies of selected unique item
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null)
   const [sellItem, setSellItem] = useState<InventoryItem | null>(null)
@@ -121,18 +122,35 @@ export default function MarketplacePage() {
 
   const fetchMyInventory = async () => {
     if (!user) return
-    const allListingsRes = await fetch("/api/listings")
-    const allListings: Listing[] = await allListingsRes.json()
-    const listedInvIds = new Set(
-      Array.isArray(allListings)
-        ? allListings.filter((l) => l.seller_id === user.id).map((l) => l.inventory_id)
-        : []
-    )
-    const invRes = await fetch(`/api/inventory/${user.id}`)
-    const data: InventoryItem[] = await invRes.json()
-    const available = Array.isArray(data) ? data.filter((inv) => !listedInvIds.has(inv.id)) : []
-    setMyInventory(available)
-    setSellItem((prev) => prev ? (available.find((i) => i.id === prev.id) ?? null) : null)
+    setMyInventoryLoading(true)
+    try {
+      // Fetch all active listings to exclude already-listed items
+      const allListingsRes = await fetch("/api/listings?limit=10000")
+      const allListings: Listing[] = await allListingsRes.json()
+      const listedInvIds = new Set(
+        Array.isArray(allListings)
+          ? allListings.filter((l) => l.seller_id === user.id).map((l) => l.inventory_id)
+          : []
+      )
+
+      // Paginate through all inventory pages (API returns 1000 per page)
+      let allInv: InventoryItem[] = []
+      let page = 0
+      while (true) {
+        const res = await fetch(`/api/inventory/${user.id}?page=${page}`)
+        const data = await res.json()
+        const batch: InventoryItem[] = Array.isArray(data.items) ? data.items : Array.isArray(data) ? data : []
+        allInv = allInv.concat(batch)
+        if (batch.length < 1000) break
+        page++
+      }
+
+      const available = allInv.filter((inv) => !listedInvIds.has(inv.id))
+      setMyInventory(available)
+      setSellItem((prev) => prev ? (available.find((i) => i.id === prev.id) ?? null) : null)
+    } finally {
+      setMyInventoryLoading(false)
+    }
   }
 
   const openSellDialog = () => {
@@ -237,7 +255,7 @@ export default function MarketplacePage() {
       {/* Login wall — blur content for guests */}
       <Box sx={{ display: "flex", gap: 3, alignItems: "flex-start" }}>
         <Box sx={{ display: { xs: "none", md: "block" } }}>
-          <FilterPanel {...filterProps} />
+            {hydrated && <FilterPanel {...filterProps} />}
         </Box>
         <Box sx={{ flex: 1, position: "relative", minHeight: 300 }}>
           {!user && (
@@ -304,7 +322,7 @@ export default function MarketplacePage() {
 
       {/* Mobile filter drawer */}
       <Drawer anchor="left" open={filterOpen} onClose={() => setFilterOpen(false)}>
-        <Box sx={{ p: 2, width: 280 }}><FilterPanel {...filterProps} /></Box>
+        <Box sx={{ p: 2, width: 280 }}>{hydrated && <FilterPanel {...filterProps} />}</Box>
       </Drawer>
 
       {/* Sell dialog — two-step */}
@@ -322,6 +340,11 @@ export default function MarketplacePage() {
         <DialogContent>
           {sellSuccess ? (
             <Alert severity="success" sx={{ mt: 1 }}>Listed successfully!</Alert>
+          ) : myInventoryLoading ? (
+            <Box sx={{ display: "flex", alignItems: "center", gap: 2, py: 4, justifyContent: "center" }}>
+              <CircularProgress size={24} />
+              <Typography color="text.secondary">Loading your inventory…</Typography>
+            </Box>
           ) : myInventory.length === 0 ? (
             <Typography color="text.secondary" sx={{ mt: 1 }}>No items available to list.</Typography>
           ) : !selectedItemId ? (
