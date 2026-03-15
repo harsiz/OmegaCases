@@ -9,6 +9,8 @@ export async function POST(request: Request) {
 
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://omegacases.com"
 
+  const orderId = `oc_${user_id}_${Date.now()}`
+
   const res = await fetch(`${NOWPAYMENTS_API}/payment`, {
     method: "POST",
     headers: {
@@ -21,7 +23,7 @@ export async function POST(request: Request) {
       pay_currency: currency.toLowerCase(),
       order_description: `OmegaCases deposit for user ${user_id}`,
       ipn_callback_url: `${appUrl}/api/payments/webhook`,
-      order_id: `oc_${user_id}_${Date.now()}`,
+      order_id: orderId,
     }),
   })
 
@@ -31,11 +33,12 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: data.message || "Payment creation failed" }, { status: 500 })
   }
 
-  // Record pending deposit
+  // Record pending deposit — store both payment_id and order_id for reliable webhook matching
   const supabase = await createClient()
   await supabase.from("deposits").insert({
     user_id,
     payment_id: data.payment_id,
+    order_id: orderId,
     amount_usd: amount,
     crypto: currency,
     status: "pending",
