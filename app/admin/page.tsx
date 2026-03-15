@@ -4,30 +4,41 @@ import { useEffect, useState, useRef } from "react"
 import {
   Container, Box, Typography, Button, Card, CardContent, CardMedia,
   TextField, Select, MenuItem, FormControl, InputLabel, Grid,
-  Alert, CircularProgress, Chip, Tab, Tabs, Dialog, DialogTitle,
-  DialogContent, DialogActions, Slider,
+  Alert, CircularProgress, Chip, Tab, Tabs, Slider,
 } from "@mui/material"
 import AddIcon from "@mui/icons-material/Add"
+import UploadIcon from "@mui/icons-material/Upload"
 import { useAuth } from "@/lib/auth-context"
+import { createClient } from "@/lib/supabase/client"
 import type { Item, Rarity } from "@/lib/types"
 import { RARITY_COLORS } from "@/lib/types"
 import { useRouter } from "next/navigation"
 
 const RARITIES = ["Common", "Uncommon", "Rare", "Legendary", "Omega"]
-const RARITY_RECOMMENDED: Record<string, string> = {
-  "40-100": "Common",
-  "15-39": "Uncommon",
-  "5-14": "Rare",
-  "1-4": "Legendary",
-  "0-0.99": "Omega",
+
+function getRecommendedRarity(pct: number): string {
+  if (pct >= 40) return "Common"
+  if (pct >= 15) return "Uncommon"
+  if (pct >= 5) return "Rare"
+  if (pct >= 1) return "Legendary"
+  return "Omega"
 }
 
-function getRecommendedRarity(likelihood: number): string {
-  if (likelihood >= 40) return "Common"
-  if (likelihood >= 15) return "Uncommon"
-  if (likelihood >= 5) return "Rare"
-  if (likelihood >= 1) return "Legendary"
-  return "Omega"
+// Convert slider value (0–1000) to percentage
+// Slider 0–1000 maps to 0.002%–100% on a log scale
+function sliderToPercent(val: number): number {
+  if (val === 0) return 0.002
+  // Logarithmic: slider 1000 = 100%, slider 0 = 0.002%
+  const min = Math.log(0.002)
+  const max = Math.log(100)
+  return parseFloat(Math.exp(min + (val / 1000) * (max - min)).toFixed(6))
+}
+
+function percentToSlider(pct: number): number {
+  const min = Math.log(0.002)
+  const max = Math.log(100)
+  const val = ((Math.log(pct) - min) / (max - min)) * 1000
+  return Math.round(Math.max(0, Math.min(1000, val)))
 }
 
 export default function AdminPage() {
@@ -40,14 +51,31 @@ export default function AdminPage() {
   // New item form
   const [name, setName] = useState("")
   const [imageUrl, setImageUrl] = useState("")
+  const [imageFile, setImageFile] = useState<File | null>(null)
+  const [imagePreview, setImagePreview] = useState<string>("")
+  const [imageUploading, setImageUploading] = useState(false)
   const [rarity, setRarity] = useState("Common")
-  const [likelihood, setLikelihood] = useState(10)
+  const [sliderVal, setSliderVal] = useState(percentToSlider(10))
+  const [customPct, setCustomPct] = useState("")
   const [marketPrice, setMarketPrice] = useState("")
   const [creating, setCreating] = useState(false)
   const [createError, setCreateError] = useState("")
   const [createSuccess, setCreateSuccess] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
-  const recommended = getRecommendedRarity(likelihood)
+  const likelihood = sliderVal <= 0
+    ? 0.002
+    : customPct !== "" && sliderVal === 0
+      ? parseFloat(customPct) || 0.002
+      : sliderToPercent(sliderVal)
+
+  // Threshold: show custom text field when slider <= threshold for 0.1% (1 in 1000)
+  const CUSTOM_THRESHOLD = percentToSlider(0.1)
+  const showCustomInput = sliderVal <= CUSTOM_THRESHOLD
+
+  const displayPct = showCustomInput && customPct !== "" ? parseFloat(customPct) || 0 : sliderToPercent(sliderVal)
+  const oneIn = displayPct > 0 ? Math.round(100 / displayPct) : 50000
+  const recommended = getRecommendedRarity(displayPct)
 
   const loadItems = async () => {
     const res = await fetch("/api/admin/items")
@@ -61,28 +89,65 @@ export default function AdminPage() {
     if (user?.admin) loadItems()
   }, [user])
 
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setImageFile(file)
+    setImagePreview(URL.createObjectURL(file))
+    setImageUrl("")
+  }
+
+  const uploadImage = async (): Promise<string | null> => {
+    if (!imageFile) return imageUrl || null
+    setImageUploading(true)
+    try {
+      const supabase = createClient()
+      const ext = imageFile.name.split(".").pop()
+      const path = `items/${Date.now()}.${ext}`
+      const { error } = await supabase.storage
+        .from("itemstuffs")
+        .upload(path, imageFile, { upsert: true })
+      if (error) throw error
+      const { data: urlData } = supabase.storage.from("itemstuffs").getPublicUrl(path)
+      return urlData.publicUrl
+    } catch (e: any) {
+      setCreateError(`Image upload failed: ${e.message}`)
+      return null
+    } finally {
+      setImageUploading(false)
+    }
+  }
+
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault()
     setCreateError("")
     setCreateSuccess(false)
     setCreating(true)
     try {
+      const finalUrl = await uploadImage()
+      if (!finalUrl) { setCreating(false); return }
+
+      const finalLikelihood = showCustomInput && customPct !== ""
+        ? Math.min(Math.max(parseFloat(customPct) || 0.002, 0.002), 100)
+        : sliderToPercent(sliderVal)
+
       const res = await fetch("/api/admin/items", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           user_id: user!.id,
           name,
-          image_url: imageUrl,
+          image_url: finalUrl,
           rarity,
-          likelihood,
+          likelihood: finalLikelihood,
           market_price: parseFloat(marketPrice) || 0,
         }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error)
       setCreateSuccess(true)
-      setName(""); setImageUrl(""); setMarketPrice("")
+      setName(""); setImageUrl(""); setImageFile(null); setImagePreview(""); setMarketPrice("")
+      setSliderVal(percentToSlider(10)); setCustomPct("")
       loadItems()
     } catch (e: any) {
       setCreateError(e.message)
@@ -96,9 +161,7 @@ export default function AdminPage() {
 
   return (
     <Container maxWidth="lg" sx={{ py: 4 }}>
-      <Typography variant="h4" fontWeight={700} gutterBottom>
-        Admin Panel
-      </Typography>
+      <Typography variant="h4" fontWeight={700} gutterBottom>Admin Panel</Typography>
       <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ mb: 3 }}>
         <Tab label="Items" />
         <Tab label="Add Item" />
@@ -114,7 +177,7 @@ export default function AdminPage() {
               {items.map((item) => {
                 const color = RARITY_COLORS[item.rarity as Rarity]
                 const chance = Number(item.likelihood)
-                const oneIn = Math.round(100 / chance)
+                const oneInVal = chance > 0 ? Math.round(100 / chance) : 0
                 return (
                   <Grid item key={item.id} xs={6} sm={4} md={3} lg={2}>
                     <Card sx={{ border: `1px solid ${color}44` }}>
@@ -131,7 +194,7 @@ export default function AdminPage() {
                           {item.name}
                         </Typography>
                         <Typography variant="caption" color="text.secondary">
-                          1 in {oneIn} ({chance}%)
+                          {chance < 0.1 ? `1 in ${oneInVal.toLocaleString()}` : `${chance}%`}
                         </Typography>
                         <Typography variant="caption" display="block" color="primary.main">
                           ${Number(item.market_price).toFixed(2)}
@@ -152,12 +215,50 @@ export default function AdminPage() {
             <Typography variant="h6" fontWeight={700} gutterBottom>New Item</Typography>
             <Box component="form" onSubmit={handleCreate} sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
               <TextField label="Name" value={name} onChange={(e) => setName(e.target.value)} required fullWidth />
-              <TextField label="Image URL" value={imageUrl} onChange={(e) => setImageUrl(e.target.value)} required fullWidth
-                helperText="PNG or GIF. Animated GIFs loop automatically." />
-              {imageUrl && (
-                <Box component="img" src={imageUrl} alt="preview"
-                  sx={{ width: 100, height: 100, objectFit: "contain", border: "1px solid #e3f2fd", borderRadius: 1 }} />
-              )}
+
+              {/* Image: file upload OR URL */}
+              <Box>
+                <Typography variant="body2" gutterBottom fontWeight={600}>Item Image</Typography>
+                <Box sx={{ display: "flex", gap: 1, alignItems: "center", flexWrap: "wrap" }}>
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    startIcon={<UploadIcon />}
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    Upload File
+                  </Button>
+                  <Typography variant="caption" color="text.secondary">or paste URL below</Typography>
+                </Box>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  style={{ display: "none" }}
+                  onChange={handleFileChange}
+                />
+                {!imageFile && (
+                  <TextField
+                    label="Image URL"
+                    value={imageUrl}
+                    onChange={(e) => { setImageUrl(e.target.value); setImagePreview(e.target.value) }}
+                    fullWidth
+                    size="small"
+                    sx={{ mt: 1 }}
+                    helperText="PNG, GIF, or WEBP. Animated GIFs loop automatically."
+                  />
+                )}
+                {imageFile && (
+                  <Box sx={{ display: "flex", alignItems: "center", gap: 1, mt: 1 }}>
+                    <Chip label={imageFile.name} size="small" onDelete={() => { setImageFile(null); setImagePreview("") }} />
+                  </Box>
+                )}
+                {imagePreview && (
+                  <Box component="img" src={imagePreview} alt="preview"
+                    sx={{ mt: 1, width: 100, height: 100, objectFit: "contain", border: "1px solid #e3f2fd", borderRadius: 1 }} />
+                )}
+              </Box>
+
               <FormControl fullWidth>
                 <InputLabel>Rarity</InputLabel>
                 <Select value={rarity} onChange={(e) => setRarity(e.target.value)} label="Rarity">
@@ -169,23 +270,48 @@ export default function AdminPage() {
                   ))}
                 </Select>
               </FormControl>
+
               <Box>
                 <Typography variant="body2" gutterBottom>
-                  Likelihood: <strong>{likelihood}%</strong> (1 in {Math.round(100 / likelihood)})
+                  Likelihood:{" "}
+                  <strong>
+                    {displayPct < 0.1
+                      ? `${displayPct.toFixed(4)}% (1 in ${oneIn.toLocaleString()})`
+                      : `${displayPct.toFixed(2)}% (1 in ${oneIn.toLocaleString()})`}
+                  </strong>
                 </Typography>
                 <Slider
-                  value={likelihood}
-                  onChange={(_, v) => setLikelihood(v as number)}
-                  min={0.1}
-                  max={50}
-                  step={0.1}
+                  value={sliderVal}
+                  onChange={(_, v) => {
+                    setSliderVal(v as number)
+                    setCustomPct("")
+                  }}
+                  min={0}
+                  max={1000}
+                  step={1}
                 />
+                <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 1 }}>
+                  Drag left for rarer. Max rarity: 1 in 50,000.
+                </Typography>
+                {showCustomInput && (
+                  <TextField
+                    label="Custom Likelihood (%)"
+                    size="small"
+                    type="number"
+                    value={customPct}
+                    onChange={(e) => setCustomPct(e.target.value)}
+                    inputProps={{ min: 0.002, max: 0.1, step: 0.001 }}
+                    helperText="Enter a percentage (e.g. 0.05 = 1 in 2,000). Min: 0.002% (1 in 50,000)."
+                    fullWidth
+                  />
+                )}
                 <Chip
                   label={`Recommended: ${recommended}`}
                   size="small"
-                  sx={{ bgcolor: RARITY_COLORS[recommended as Rarity], color: "#fff", fontSize: "0.65rem" }}
+                  sx={{ bgcolor: RARITY_COLORS[recommended as Rarity], color: "#fff", fontSize: "0.65rem", mt: 1 }}
                 />
               </Box>
+
               <TextField
                 label="Market Price (USD)"
                 type="number"
@@ -196,8 +322,13 @@ export default function AdminPage() {
               />
               {createError && <Alert severity="error">{createError}</Alert>}
               {createSuccess && <Alert severity="success">Item created!</Alert>}
-              <Button type="submit" variant="contained" startIcon={<AddIcon />} disabled={creating}>
-                {creating ? "Creating..." : "Create Item"}
+              <Button
+                type="submit"
+                variant="contained"
+                startIcon={imageUploading ? <CircularProgress size={16} sx={{ color: "inherit" }} /> : <AddIcon />}
+                disabled={creating || imageUploading}
+              >
+                {creating || imageUploading ? "Creating..." : "Create Item"}
               </Button>
             </Box>
           </CardContent>

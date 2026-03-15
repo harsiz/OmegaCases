@@ -9,8 +9,7 @@ const ITEM_WIDTH = 140
 const ITEM_GAP = 8
 const TOTAL_ITEM = ITEM_WIDTH + ITEM_GAP
 const VISIBLE_ITEMS = 7
-const SPINNER_WIDTH = VISIBLE_ITEMS * TOTAL_ITEM - ITEM_GAP
-const CENTER_OFFSET = Math.floor(VISIBLE_ITEMS / 2) * TOTAL_ITEM
+const MAX_SPINNER_WIDTH = VISIBLE_ITEMS * TOTAL_ITEM - ITEM_GAP
 
 const TICK_SRC = "https://hebbkx1anhila5yf.public.blob.vercel-storage.com/case%20tick%20sound-XkLDyOzDrmlVl8p3DMaTwFZjDlwS2P.mp3"
 
@@ -30,20 +29,20 @@ function playTick() {
 }
 
 export default function CaseSpinner({ items, targetItem, onComplete, spinning }: Props) {
+  const containerRef = useRef<HTMLDivElement>(null)
   const trackRef = useRef<HTMLDivElement>(null)
   const animFrameRef = useRef<number>(0)
   const startTimeRef = useRef<number>(0)
   const lastTickIndexRef = useRef<number>(-1)
   const [currentOffset, setCurrentOffset] = useState(0)
 
-  // Build a long strip: 80 random items, target forced near end
+  // Build a long strip: 60 random items, target forced near end
   const stripItems = useRef<Item[]>([])
   const targetIndexRef = useRef(0)
 
   useEffect(() => {
     if (!spinning || items.length === 0) return
 
-    // Build strip of 60 random items, then put target at position 55
     const total = 60
     const targetPos = 52
     const strip: Item[] = []
@@ -57,13 +56,16 @@ export default function CaseSpinner({ items, targetItem, onComplete, spinning }:
     stripItems.current = strip
     targetIndexRef.current = targetPos
 
-    // Final offset: center the target item
-    const finalOffset = targetPos * TOTAL_ITEM - CENTER_OFFSET + ITEM_WIDTH / 2
+    // Use actual container width to compute center offset so target always lands under the marker
+    const containerWidth = containerRef.current?.offsetWidth ?? MAX_SPINNER_WIDTH
+    const centerOffset = Math.floor(containerWidth / 2)
 
-    // Start from offset 0
+    // Final offset: center the target item under the center marker
+    const finalOffset = targetPos * TOTAL_ITEM - centerOffset + ITEM_WIDTH / 2
+
     const startOffset = 0
     const distance = finalOffset - startOffset
-    const duration = 5000 // ms
+    const duration = 5000
 
     startTimeRef.current = performance.now()
     lastTickIndexRef.current = -1
@@ -77,7 +79,6 @@ export default function CaseSpinner({ items, targetItem, onComplete, spinning }:
       const offset = startOffset + distance * eased
       setCurrentOffset(offset)
 
-      // Tick sound: fire when we cross a new item boundary
       const currentIndex = Math.floor(offset / TOTAL_ITEM)
       if (currentIndex !== lastTickIndexRef.current && t < 0.95) {
         lastTickIndexRef.current = currentIndex
@@ -98,10 +99,11 @@ export default function CaseSpinner({ items, targetItem, onComplete, spinning }:
 
   return (
     <Box
+      ref={containerRef}
       sx={{
         position: "relative",
-        width: SPINNER_WIDTH,
-        maxWidth: "100%",
+        width: "100%",
+        maxWidth: MAX_SPINNER_WIDTH,
         overflow: "hidden",
         borderRadius: 2,
         border: "2px solid #1976d2",
@@ -109,7 +111,7 @@ export default function CaseSpinner({ items, targetItem, onComplete, spinning }:
         mx: "auto",
       }}
     >
-      {/* Center marker */}
+      {/* Center marker — always at 50% of actual container */}
       <Box
         sx={{
           position: "absolute",
@@ -121,33 +123,12 @@ export default function CaseSpinner({ items, targetItem, onComplete, spinning }:
           zIndex: 10,
           transform: "translateX(-50%)",
           boxShadow: "0 0 8px #1976d2",
+          pointerEvents: "none",
         }}
       />
       {/* Fade edges */}
-      <Box
-        sx={{
-          position: "absolute",
-          left: 0,
-          top: 0,
-          bottom: 0,
-          width: 80,
-          background: "linear-gradient(to right, #f0f7ff, transparent)",
-          zIndex: 5,
-          pointerEvents: "none",
-        }}
-      />
-      <Box
-        sx={{
-          position: "absolute",
-          right: 0,
-          top: 0,
-          bottom: 0,
-          width: 80,
-          background: "linear-gradient(to left, #f0f7ff, transparent)",
-          zIndex: 5,
-          pointerEvents: "none",
-        }}
-      />
+      <Box sx={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 60, background: "linear-gradient(to right, #f0f7ff, transparent)", zIndex: 5, pointerEvents: "none" }} />
+      <Box sx={{ position: "absolute", right: 0, top: 0, bottom: 0, width: 60, background: "linear-gradient(to left, #f0f7ff, transparent)", zIndex: 5, pointerEvents: "none" }} />
 
       {/* Track */}
       <Box

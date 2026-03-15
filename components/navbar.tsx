@@ -9,6 +9,7 @@ import {
   Drawer, List, ListItem, ListItemText, ListItemButton,
 } from "@mui/material"
 import MenuIcon from "@mui/icons-material/Menu"
+import WorkspacesIcon from "@mui/icons-material/Workspaces"
 import { useAuth } from "@/lib/auth-context"
 import DepositWithdrawModal from "./deposit-withdraw-modal"
 
@@ -83,6 +84,18 @@ export default function Navbar() {
               </Button>
             ))}
           </Box>
+
+          {/* Cases button — always visible */}
+          <Button
+            component={NextLink}
+            href="/open"
+            variant="contained"
+            startIcon={<WorkspacesIcon />}
+            size="small"
+            sx={{ fontWeight: 700, mr: 1 }}
+          >
+            Cases
+          </Button>
 
           <Box sx={{ flex: 1 }} />
 
