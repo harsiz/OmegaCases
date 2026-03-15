@@ -34,24 +34,34 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true })
   }
 
-  const supabase = createClient()
+  const supabase = await createClient()
 
   let deposit: any = null
 
-  // 1. Try by payment_id (most reliable)
+  // 1. Try by payment_id — cast to numeric for reliable matching
   if (payment_id) {
     const { data } = await supabase
       .from("deposits")
       .select("*")
-      .eq("payment_id", String(payment_id))
+      .eq("payment_id", payment_id)
       .maybeSingle()
     deposit = data
   }
 
-  // 2. Fallback: extract user_id from order_id (format: oc_{user_id}_{timestamp})
+  // 2. Fallback: try matching stored order_id directly
+  if (!deposit && typeof order_id === "string") {
+    const { data } = await supabase
+      .from("deposits")
+      .select("*")
+      .eq("order_id", order_id)
+      .maybeSingle()
+    deposit = data
+  }
+
+  // 3. Last resort: extract user_id from order_id format oc_{uuid}_{timestamp}
   if (!deposit && typeof order_id === "string" && order_id.startsWith("oc_")) {
     const parts = order_id.split("_")
-    // uuid contains hyphens so rejoin middle parts: parts[0]="oc", last=timestamp
+    // UUID contains hyphens — rejoin middle parts: parts[0]="oc", last=timestamp
     const userId = parts.slice(1, -1).join("_")
     const { data } = await supabase
       .from("deposits")
