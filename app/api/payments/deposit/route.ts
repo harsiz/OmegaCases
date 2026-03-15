@@ -7,7 +7,7 @@ const NOWPAYMENTS_API = "https://api.nowpayments.io/v1"
 export async function POST(request: Request) {
   const { user_id, amount, currency } = await request.json()
 
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://omega-cases.vercel.app"
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://omegacases.com"
 
   const res = await fetch(`${NOWPAYMENTS_API}/payment`, {
     method: "POST",
