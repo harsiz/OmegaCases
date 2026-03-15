@@ -4,6 +4,8 @@ import { getRarityPriceCaps } from "@/lib/game-settings"
 
 const MAX_LISTING_PRICE = 800
 
+const PAGE_SIZE = 24
+
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
   const id = searchParams.get("id")
@@ -16,6 +18,9 @@ export async function GET(request: Request) {
   const sortDir = searchParams.get("sortDir") === "asc"
   const excludeSeller = searchParams.get("excludeSeller")
   const showSold = searchParams.get("showSold") === "true"
+  const page = Math.max(0, parseInt(searchParams.get("page") || "0", 10))
+  // limit=10000 used by sell dialog to get all active listings for exclusion check
+  const limit = searchParams.get("limit") ? parseInt(searchParams.get("limit")!, 10) : PAGE_SIZE
 
   const db = await createClient()
 
@@ -38,7 +43,7 @@ export async function GET(request: Request) {
 
   let query = db
     .from("listings")
-    .select("*, items(*), users(id, username, profile_picture)")
+    .select("*, items(*), users(id, username, profile_picture)", { count: "exact" })
     .order(sortBy === "price" ? "price" : "created_at", { ascending: sortDir })
 
   if (showSold) {
@@ -51,17 +56,27 @@ export async function GET(request: Request) {
   if (maxPrice) query = query.lte("price", parseFloat(maxPrice))
   if (excludeSeller) query = query.neq("seller_id", excludeSeller)
 
-  const { data, error } = await query
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-
-  let listings = data || []
-  // Multi-rarity filter (comma-separated)
+  // Rarity filter: push to DB so it reduces row count before pagination
   if (rarity) {
     const rarityList = rarity.split(",").map((r) => r.trim()).filter(Boolean)
     if (rarityList.length > 0) {
-      listings = listings.filter((l: any) => rarityList.includes(l.items?.rarity))
+      // Filter via joined items table
+      query = query.in("items.rarity", rarityList)
     }
   }
+
+  // Apply pagination (skip for unlimited requests like limit=10000)
+  if (limit <= 1000) {
+    const from = page * limit
+    query = query.range(from, from + limit - 1)
+  }
+
+  const { data, error, count } = await query
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  let listings = data || []
+
+  // Client-side text filters (can't easily push to Supabase without full-text search)
   if (search) {
     const s = search.toLowerCase()
     listings = listings.filter((l: any) => l.items?.name?.toLowerCase().includes(s))
@@ -70,8 +85,18 @@ export async function GET(request: Request) {
     const ss = sellerSearch.toLowerCase()
     listings = listings.filter((l: any) => l.users?.username?.toLowerCase().includes(ss))
   }
+  // Filter out rows where rarity join returned null (Supabase returns all rows with null items if rarity filter doesn't match)
+  if (rarity) {
+    const rarityList = rarity.split(",").map((r) => r.trim()).filter(Boolean)
+    listings = listings.filter((l: any) => rarityList.includes(l.items?.rarity))
+  }
 
-  return NextResponse.json(listings)
+  if (limit > 1000) {
+    // Legacy: return plain array for internal use
+    return NextResponse.json(listings)
+  }
+
+  return NextResponse.json({ listings, total: count ?? 0, page, pageSize: limit })
 }
 
 export async function POST(request: Request) {

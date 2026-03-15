@@ -6,7 +6,7 @@ import {
   Chip, TextField, Select, MenuItem, FormControl, InputLabel,
   Button, Dialog, DialogTitle, DialogContent, DialogActions,
   CircularProgress, Alert, Drawer, List, ListItemButton, ListItemAvatar,
-  Avatar, ListItemText, Divider, Checkbox, FormControlLabel, Tooltip, Slider,
+  Avatar, ListItemText, Divider, Checkbox, FormControlLabel, Tooltip, Slider, Pagination,
 } from "@mui/material"
 import FilterListIcon from "@mui/icons-material/FilterList"
 import AddIcon from "@mui/icons-material/Add"
@@ -46,13 +46,15 @@ export default function MarketplacePage() {
 
   const [listings, setListings] = useState<Listing[]>([])
   const [loading, setLoading] = useState(true)
+  const [page, setPage] = useState(0)
+  const [totalListings, setTotalListings] = useState(0)
   const [search, setSearch] = useState("")
-  const [rarities, setRarities] = useState<string[]>([])
+  const [rarities, setRarities] = useState<string[]>(["Rare", "Legendary", "Omega"])
   const [minPrice, setMinPrice] = useState<string>("")
   const [maxPrice, setMaxPrice] = useState<string>("")
   const [sellerSearch, setSellerSearch] = useState("")
   const [sortBy, setSortBy] = useState("created_at")
-  const [ignoreOwn, setIgnoreOwn] = useState(false)
+  const [ignoreOwn, setIgnoreOwn] = useState(true)
   const [showSold, setShowSold] = useState(false)
   const [filterOpen, setFilterOpen] = useState(false)
   const [hydrated, setHydrated] = useState(false)
@@ -62,15 +64,17 @@ export default function MarketplacePage() {
     try {
       const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "null")
       if (saved) {
-        if (saved.search) setSearch(saved.search)
-        if (saved.rarities) setRarities(saved.rarities)
-        if (saved.minPrice) setMinPrice(saved.minPrice)
-        if (saved.maxPrice) setMaxPrice(saved.maxPrice)
-        if (saved.sellerSearch) setSellerSearch(saved.sellerSearch)
+        if (saved.search !== undefined) setSearch(saved.search)
+        // Only restore rarities if explicitly saved (not first visit)
+        if (Array.isArray(saved.rarities)) setRarities(saved.rarities)
+        if (saved.minPrice !== undefined) setMinPrice(saved.minPrice)
+        if (saved.maxPrice !== undefined) setMaxPrice(saved.maxPrice)
+        if (saved.sellerSearch !== undefined) setSellerSearch(saved.sellerSearch)
         if (saved.sortBy) setSortBy(saved.sortBy)
         if (saved.ignoreOwn != null) setIgnoreOwn(saved.ignoreOwn)
         if (saved.showSold != null) setShowSold(saved.showSold)
       }
+      // If no saved state, defaults (Rare+Legendary+Omega, ignoreOwn=true) already set above
     } catch {}
     setHydrated(true)
   }, [])
@@ -106,11 +110,33 @@ export default function MarketplacePage() {
     if (ignoreOwn && user?.id) params.set("excludeSeller", user.id)
     if (showSold) params.set("showSold", "true")
     params.set("sortBy", sortBy)
+    params.set("page", String(page))
     const res = await fetch(`/api/listings?${params}`)
     const data = await res.json()
-    setListings(Array.isArray(data) ? data : [])
+    // API returns { listings, total, page, pageSize } when paginated
+    if (data && Array.isArray(data.listings)) {
+      setListings(data.listings)
+      setTotalListings(data.total ?? 0)
+    } else {
+      setListings(Array.isArray(data) ? data : [])
+      setTotalListings(0)
+    }
     setLoading(false)
-  }, [rarities, minPrice, maxPrice, sortBy, search, sellerSearch, ignoreOwn, showSold, user?.id])
+  }, [rarities, minPrice, maxPrice, sortBy, search, sellerSearch, ignoreOwn, showSold, user?.id, page])
+
+  // Reset to page 0 whenever filters change (but not when page itself changes)
+  const prevFiltersRef = useRef({ rarities, minPrice, maxPrice, search, sellerSearch, sortBy, ignoreOwn, showSold })
+  useEffect(() => {
+    const prev = prevFiltersRef.current
+    if (
+      prev.search !== search || prev.rarities !== rarities || prev.minPrice !== minPrice ||
+      prev.maxPrice !== maxPrice || prev.sellerSearch !== sellerSearch || prev.sortBy !== sortBy ||
+      prev.ignoreOwn !== ignoreOwn || prev.showSold !== showSold
+    ) {
+      setPage(0)
+      prevFiltersRef.current = { rarities, minPrice, maxPrice, search, sellerSearch, sortBy, ignoreOwn, showSold }
+    }
+  }, [rarities, minPrice, maxPrice, search, sellerSearch, sortBy, ignoreOwn, showSold])
 
   const searchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null)
   useEffect(() => {
@@ -277,45 +303,59 @@ export default function MarketplacePage() {
           ) : listings.length === 0 ? (
             <Box textAlign="center" py={8}><Typography color="text.secondary">No listings found</Typography></Box>
           ) : (
-            <Grid container spacing={2}>
-              {listings.map((listing) => {
-                const item = listing.items
-                if (!item) return null
-                const color = RARITY_COLORS[item.rarity as Rarity]
-                return (
-                  <Grid item key={listing.id} xs={6} sm={4} md={3} lg={2}>
-                    <Card
-                      component={NextLink}
-                      href={`/listing/${listing.id}`}
-                      sx={{
-                        cursor: "pointer", textDecoration: "none", display: "block",
-                        border: `1px solid ${color}33`,
-                        "&:hover": { boxShadow: `0 4px 20px ${color}44`, transform: "translateY(-2px)", transition: "all 0.15s" },
-                      }}
-                    >
-                      <CardMedia component="img" image={item.image_url} alt={item.name}
-                        sx={{ height: 120, objectFit: "contain", p: 1, bgcolor: "#f8fbff" }} />
-                      <CardContent sx={{ py: 1, "&:last-child": { pb: 1 } }}>
-                        <Chip label={item.rarity} size="small" sx={{ bgcolor: color, color: "#fff", mb: 0.5, fontSize: "0.6rem" }} />
-                        <Tooltip title={item.name} placement="top" arrow>
-                          <Typography variant="caption" display="block" fontWeight={600}
-                            sx={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: "text.primary" }}>
-                            {item.name}
+            <>
+              <Grid container spacing={2}>
+                {listings.map((listing) => {
+                  const item = listing.items
+                  if (!item) return null
+                  const color = RARITY_COLORS[item.rarity as Rarity]
+                  return (
+                    <Grid item key={listing.id} xs={6} sm={4} md={3} lg={2}>
+                      <Card
+                        component={NextLink}
+                        href={`/listing/${listing.id}`}
+                        sx={{
+                          cursor: "pointer", textDecoration: "none", display: "block",
+                          border: `1px solid ${color}33`,
+                          "&:hover": { boxShadow: `0 4px 20px ${color}44`, transform: "translateY(-2px)", transition: "all 0.15s" },
+                        }}
+                      >
+                        <CardMedia component="img" image={item.image_url} alt={item.name}
+                          sx={{ height: 120, objectFit: "contain", p: 1, bgcolor: "#f8fbff" }} />
+                        <CardContent sx={{ py: 1, "&:last-child": { pb: 1 } }}>
+                          <Chip label={item.rarity} size="small" sx={{ bgcolor: color, color: "#fff", mb: 0.5, fontSize: "0.6rem" }} />
+                          <Tooltip title={item.name} placement="top" arrow>
+                            <Typography variant="caption" display="block" fontWeight={600}
+                              sx={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: "text.primary" }}>
+                              {item.name}
+                            </Typography>
+                          </Tooltip>
+                          <Typography variant="body2" fontWeight={700} color={listing.status === "sold" ? "text.disabled" : "primary.main"}>
+                            ${Number(listing.price).toFixed(2)}
+                            {listing.status === "sold" && <Chip label="SOLD" size="small" sx={{ ml: 0.5, fontSize: "0.55rem", height: 16 }} color="default" />}
                           </Typography>
-                        </Tooltip>
-                        <Typography variant="body2" fontWeight={700} color={listing.status === "sold" ? "text.disabled" : "primary.main"}>
-                          ${Number(listing.price).toFixed(2)}
-                          {listing.status === "sold" && <Chip label="SOLD" size="small" sx={{ ml: 0.5, fontSize: "0.55rem", height: 16 }} color="default" />}
-                        </Typography>
-                        <Typography variant="caption" color="text.secondary" display="block">
-                          by {listing.users?.username || "—"}
-                        </Typography>
-                      </CardContent>
-                    </Card>
-                  </Grid>
-                )
-              })}
-            </Grid>
+                          <Typography variant="caption" color="text.secondary" display="block">
+                            by {listing.users?.username || "—"}
+                          </Typography>
+                        </CardContent>
+                      </Card>
+                    </Grid>
+                  )
+                })}
+              </Grid>
+              {totalListings > 24 && (
+                <Box sx={{ display: "flex", justifyContent: "center", mt: 4 }}>
+                  <Pagination
+                    count={Math.ceil(totalListings / 24)}
+                    page={page + 1}
+                    onChange={(_, p) => setPage(p - 1)}
+                    color="primary"
+                    showFirstButton
+                    showLastButton
+                  />
+                </Box>
+              )}
+            </>
           )}
         </Box>
       </Box>
