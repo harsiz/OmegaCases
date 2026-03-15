@@ -53,6 +53,7 @@ export async function POST(request: Request) {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
+      content: "<@1058838805253210172> New withdrawal request!",
       embeds: [
         {
           title: "New Withdrawal Request",
