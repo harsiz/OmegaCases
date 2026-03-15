@@ -2,15 +2,16 @@ import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 
 export async function GET() {
-  const db = createClient()
+  const db = await createClient()
 
+  // For each user, fetch their full inventory the same way the inventory page does:
+  // select all inventory rows with the joined item data, then sum rap per user
   const { data: users } = await db
     .from("users")
     .select("id, username, profile_picture")
 
   if (!users) return NextResponse.json([])
 
-  // Use the same join as the inventory API so RAP values are identical
   const { data: inventory } = await db
     .from("inventory")
     .select("user_id, items(rap)")
