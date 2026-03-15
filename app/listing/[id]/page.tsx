@@ -4,6 +4,11 @@ import { useState, useEffect } from "react"
 import { useParams, useRouter } from "next/navigation"
 import NextLink from "next/link"
 import dynamic from "next/dynamic"
+import {
+  Container, Box, Typography, Button, Card, CardMedia, CardContent,
+  Chip, CircularProgress, Alert, Dialog, DialogTitle, DialogContent,
+  DialogActions, TextField, Divider, Tooltip,
+} from "@mui/material"
 import { useAuth } from "@/lib/auth-context"
 import { RARITY_COLORS } from "@/lib/types"
 import type { Listing, Sale, Rarity } from "@/lib/types"
