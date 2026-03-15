@@ -164,7 +164,14 @@ export default function ListingPage() {
               size="small"
               sx={{ bgcolor: rarityColor, color: "#fff", mb: 1 }}
             />
-            <Typography variant="h5" fontWeight={800} gutterBottom>
+            <Typography
+              variant="h5"
+              fontWeight={800}
+              gutterBottom
+              component={NextLink}
+              href={`/item/${encodeURIComponent(item?.name ?? "")}`}
+              sx={{ color: "text.primary", textDecoration: "none", "&:hover": { textDecoration: "underline", color: "primary.main" } }}
+            >
               {item?.name}
             </Typography>
 
