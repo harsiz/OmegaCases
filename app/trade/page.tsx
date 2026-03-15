@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react"
 import NextLink from "next/link"
 import {
-  Container, Box, Typography, Card, CardContent, CardMedia, Chip, Button,
+  Container, Box, Typography, Card, CardContent, Chip, Button,
   Avatar, Grid, Tabs, Tab, Alert, CircularProgress, Divider,
   Dialog, DialogTitle, DialogContent, DialogActions, TextField,
   IconButton, Tooltip, Badge, InputAdornment, Autocomplete,
@@ -13,6 +13,7 @@ import CloseIcon from "@mui/icons-material/Close"
 import SwapHorizIcon from "@mui/icons-material/SwapHoriz"
 import CheckIcon from "@mui/icons-material/Check"
 import BlockIcon from "@mui/icons-material/Block"
+import SearchIcon from "@mui/icons-material/Search"
 import { useAuth } from "@/lib/auth-context"
 import { RARITY_COLORS } from "@/lib/types"
 import type { InventoryItem, Rarity } from "@/lib/types"
@@ -21,7 +22,7 @@ const MAX_ITEMS = 6
 const MAX_BALANCE = 50
 
 interface TradeItem {
-  id: string // inventory id
+  id: string
   item: {
     id: string
     name: string
@@ -52,6 +53,19 @@ interface Trade {
   }>
 }
 
+function tradeValue(items: TradeItem[], balance: number) {
+  return items.reduce((sum, ti) => sum + Number(ti.item.rap), 0) + Number(balance)
+}
+
+function tradeValueFromSide(
+  tradeItems: Trade["trade_items"],
+  side: string,
+  balance: number
+) {
+  const items = tradeItems.filter((ti) => ti.side === side)
+  return items.reduce((sum, ti) => sum + Number(ti.inventory.items.rap), 0) + Number(balance)
+}
+
 export default function TradePage() {
   const { user, refreshUser } = useAuth()
   const [tab, setTab] = useState(0)
@@ -61,7 +75,6 @@ export default function TradePage() {
   const [error, setError] = useState("")
   const [success, setSuccess] = useState("")
 
-  // New trade dialog
   const [newTradeOpen, setNewTradeOpen] = useState(false)
   const [allUsers, setAllUsers] = useState<{ id: string; username: string }[]>([])
   const [receiver, setReceiver] = useState<{ id: string; username: string } | null>(null)
@@ -199,14 +212,150 @@ export default function TradePage() {
     }
   }
 
+  // Item slots with search
+  const ItemSlots = ({
+    items,
+    inventory,
+    onAdd,
+    onRemove,
+    label,
+  }: {
+    items: TradeItem[]
+    inventory: InventoryItem[]
+    onAdd: (inv: InventoryItem) => void
+    onRemove: (id: string) => void
+    label: string
+  }) => {
+    const [search, setSearch] = useState("")
+    const available = inventory.filter((inv) => !items.find((i) => i.id === inv.id))
+    const filtered = available.filter((inv) =>
+      !search || inv.items?.name.toLowerCase().includes(search.toLowerCase())
+    )
+
+    return (
+      <Box>
+        <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 1 }}>
+          <Typography variant="subtitle2" fontWeight={700}>{label}</Typography>
+          <Typography variant="caption" color="primary.main" fontWeight={600}>
+            RAP: ${items.reduce((s, ti) => s + ti.item.rap, 0).toFixed(2)}
+          </Typography>
+        </Box>
+
+        {/* Selected slots */}
+        <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1, mb: 1, minHeight: 56 }}>
+          {items.map((ti) => (
+            <Badge
+              key={ti.id}
+              badgeContent={
+                <IconButton
+                  size="small"
+                  onClick={() => onRemove(ti.id)}
+                  sx={{ bgcolor: "error.main", color: "#fff", width: 16, height: 16, p: 0 }}
+                >
+                  <CloseIcon sx={{ fontSize: 10 }} />
+                </IconButton>
+              }
+              overlap="circular"
+              anchorOrigin={{ vertical: "top", horizontal: "right" }}
+            >
+              <Tooltip title={`${ti.item.name} — RAP: $${ti.item.rap.toFixed(2)}`}>
+                <Box
+                  component="img"
+                  src={ti.item.image_url}
+                  alt={ti.item.name}
+                  sx={{
+                    width: 52, height: 52, objectFit: "contain", borderRadius: 1,
+                    border: `2px solid ${RARITY_COLORS[ti.item.rarity as Rarity]}66`,
+                    bgcolor: "#f8fbff", cursor: "pointer",
+                  }}
+                />
+              </Tooltip>
+            </Badge>
+          ))}
+          {items.length < MAX_ITEMS && (
+            <Box
+              sx={{
+                width: 52, height: 52, border: "2px dashed #1976d244", borderRadius: 1,
+                display: "flex", alignItems: "center", justifyContent: "center",
+                color: "#1976d266",
+              }}
+            >
+              <AddIcon fontSize="small" />
+            </Box>
+          )}
+        </Box>
+
+        {/* Search + available items */}
+        {items.length < MAX_ITEMS && available.length > 0 && (
+          <>
+            <TextField
+              size="small"
+              placeholder="Search items..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              fullWidth
+              sx={{ mb: 1 }}
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <SearchIcon fontSize="small" />
+                  </InputAdornment>
+                ),
+              }}
+            />
+            <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5, maxHeight: 130, overflowY: "auto" }}>
+              {filtered.map((inv) => (
+                <Tooltip
+                  key={inv.id}
+                  title={`${inv.items?.name} — RAP: $${Number(inv.items?.rap || 0).toFixed(2)}`}
+                >
+                  <Box
+                    component="img"
+                    src={inv.items?.image_url}
+                    alt={inv.items?.name}
+                    onClick={() => onAdd(inv)}
+                    sx={{
+                      width: 42, height: 42, objectFit: "contain", borderRadius: 1,
+                      border: `2px solid ${RARITY_COLORS[(inv.items?.rarity as Rarity) || "Common"]}44`,
+                      bgcolor: "#f8fbff", cursor: "pointer",
+                      "&:hover": { opacity: 0.8, transform: "scale(1.06)" },
+                      transition: "all 0.1s",
+                    }}
+                  />
+                </Tooltip>
+              ))}
+              {filtered.length === 0 && (
+                <Typography variant="caption" color="text.secondary">No items match.</Typography>
+              )}
+            </Box>
+          </>
+        )}
+        {items.length === MAX_ITEMS && (
+          <Typography variant="caption" color="text.secondary">Max {MAX_ITEMS} items reached</Typography>
+        )}
+      </Box>
+    )
+  }
+
   const TradeCard = ({ trade, isSent }: { trade: Trade; isSent: boolean }) => {
     const other = isSent ? trade.receiver : trade.sender
-    const mySide = isSent ? "sender" : "receiver"
-    const theirSide = isSent ? "receiver" : "sender"
-    const myItems = trade.trade_items.filter((ti) => ti.side === mySide)
-    const theirItems = trade.trade_items.filter((ti) => ti.side === theirSide)
-    const myBalance = isSent ? trade.sender_balance : trade.receiver_balance
-    const theirBalance = isSent ? trade.receiver_balance : trade.sender_balance
+
+    // For sent trades: left = "You Offer" (sender), right = "You Request" (receiver)
+    // For received trades: left = "They Offer" (sender = them), right = "They Request" (receiver = you)
+    // So from receiver's perspective: left side shows what THEY (sender) put in, right shows what YOU (receiver) must give
+    const leftSide = "sender"
+    const rightSide = "receiver"
+
+    const leftItems = trade.trade_items.filter((ti) => ti.side === leftSide)
+    const rightItems = trade.trade_items.filter((ti) => ti.side === rightSide)
+    const leftBalance = trade.sender_balance
+    const rightBalance = trade.receiver_balance
+
+    const leftLabel = isSent ? "You Offer" : "They Offer"
+    const rightLabel = isSent ? "You Request" : "They Request"
+
+    const leftValue = tradeValueFromSide(trade.trade_items, leftSide, leftBalance)
+    const rightValue = tradeValueFromSide(trade.trade_items, rightSide, rightBalance)
     const isPending = trade.status === "pending"
 
     const statusColor: Record<string, "default" | "warning" | "success" | "error"> = {
@@ -247,13 +396,18 @@ export default function TradePage() {
           </Box>
 
           <Grid container spacing={2}>
-            {/* My side */}
+            {/* Left side */}
             <Grid item xs={5}>
-              <Typography variant="caption" color="text.secondary" fontWeight={600} display="block" mb={1}>
-                {isSent ? "You Offer" : "They Offer"}
-              </Typography>
+              <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 0.5 }}>
+                <Typography variant="caption" color="text.secondary" fontWeight={600}>
+                  {leftLabel}
+                </Typography>
+                <Typography variant="caption" color="primary.main" fontWeight={600}>
+                  ${leftValue.toFixed(2)}
+                </Typography>
+              </Box>
               <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5, minHeight: 48 }}>
-                {myItems.map((ti) => (
+                {leftItems.map((ti) => (
                   <Tooltip key={ti.id} title={`${ti.inventory.items.name} (RAP: $${Number(ti.inventory.items.rap).toFixed(2)})`}>
                     <Box
                       component="img"
@@ -267,12 +421,12 @@ export default function TradePage() {
                     />
                   </Tooltip>
                 ))}
-                {myItems.length === 0 && (
+                {leftItems.length === 0 && (
                   <Typography variant="caption" color="text.secondary">No items</Typography>
                 )}
               </Box>
-              {Number(myBalance) > 0 && (
-                <Chip label={`+$${Number(myBalance).toFixed(2)}`} color="success" size="small" sx={{ mt: 0.5 }} />
+              {Number(leftBalance) > 0 && (
+                <Chip label={`+$${Number(leftBalance).toFixed(2)}`} color="success" size="small" sx={{ mt: 0.5 }} />
               )}
             </Grid>
 
@@ -280,13 +434,18 @@ export default function TradePage() {
               <SwapHorizIcon sx={{ color: "text.secondary" }} />
             </Grid>
 
-            {/* Their side */}
+            {/* Right side */}
             <Grid item xs={5}>
-              <Typography variant="caption" color="text.secondary" fontWeight={600} display="block" mb={1}>
-                {isSent ? "You Request" : "They Request"}
-              </Typography>
+              <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 0.5 }}>
+                <Typography variant="caption" color="text.secondary" fontWeight={600}>
+                  {rightLabel}
+                </Typography>
+                <Typography variant="caption" color="primary.main" fontWeight={600}>
+                  ${rightValue.toFixed(2)}
+                </Typography>
+              </Box>
               <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5, minHeight: 48 }}>
-                {theirItems.map((ti) => (
+                {rightItems.map((ti) => (
                   <Tooltip key={ti.id} title={`${ti.inventory.items.name} (RAP: $${Number(ti.inventory.items.rap).toFixed(2)})`}>
                     <Box
                       component="img"
@@ -300,15 +459,29 @@ export default function TradePage() {
                     />
                   </Tooltip>
                 ))}
-                {theirItems.length === 0 && (
+                {rightItems.length === 0 && (
                   <Typography variant="caption" color="text.secondary">No items</Typography>
                 )}
               </Box>
-              {Number(theirBalance) > 0 && (
-                <Chip label={`+$${Number(theirBalance).toFixed(2)}`} color="success" size="small" sx={{ mt: 0.5 }} />
+              {Number(rightBalance) > 0 && (
+                <Chip label={`+$${Number(rightBalance).toFixed(2)}`} color="success" size="small" sx={{ mt: 0.5 }} />
               )}
             </Grid>
           </Grid>
+
+          {/* Overall trade value comparison */}
+          <Box sx={{ display: "flex", justifyContent: "center", gap: 2, mt: 1.5 }}>
+            <Typography variant="caption" color="text.secondary">
+              Trade value:{" "}
+              <Box component="span" sx={{ color: "primary.main", fontWeight: 700 }}>
+                ${leftValue.toFixed(2)}
+              </Box>
+              {" "}vs{" "}
+              <Box component="span" sx={{ color: "primary.main", fontWeight: 700 }}>
+                ${rightValue.toFixed(2)}
+              </Box>
+            </Typography>
+          </Box>
 
           {isPending && (
             <Box sx={{ display: "flex", gap: 1, mt: 2, justifyContent: "flex-end" }}>
@@ -353,95 +526,6 @@ export default function TradePage() {
     )
   }
 
-  const ItemSlots = ({
-    items,
-    inventory,
-    onAdd,
-    onRemove,
-    label,
-  }: {
-    items: TradeItem[]
-    inventory: InventoryItem[]
-    onAdd: (inv: InventoryItem) => void
-    onRemove: (id: string) => void
-    label: string
-  }) => {
-    const available = inventory.filter((inv) => !items.find((i) => i.id === inv.id))
-    return (
-      <Box>
-        <Typography variant="subtitle2" fontWeight={700} gutterBottom>{label}</Typography>
-        <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1, mb: 1, minHeight: 56 }}>
-          {items.map((ti) => (
-            <Badge
-              key={ti.id}
-              badgeContent={
-                <IconButton size="small" onClick={() => onRemove(ti.id)} sx={{ bgcolor: "error.main", color: "#fff", width: 16, height: 16, p: 0 }}>
-                  <CloseIcon sx={{ fontSize: 10 }} />
-                </IconButton>
-              }
-              overlap="circular"
-              anchorOrigin={{ vertical: "top", horizontal: "right" }}
-            >
-              <Tooltip title={`${ti.item.name} — RAP: $${ti.item.rap.toFixed(2)}`}>
-                <Box
-                  component="img"
-                  src={ti.item.image_url}
-                  alt={ti.item.name}
-                  sx={{
-                    width: 52, height: 52, objectFit: "contain", borderRadius: 1,
-                    border: `2px solid ${RARITY_COLORS[ti.item.rarity as Rarity]}66`,
-                    bgcolor: "#f8fbff", cursor: "pointer",
-                  }}
-                />
-              </Tooltip>
-            </Badge>
-          ))}
-          {items.length < MAX_ITEMS && available.length > 0 && (
-            <Tooltip title="Add item">
-              <Box
-                sx={{
-                  width: 52, height: 52, border: "2px dashed #1976d244", borderRadius: 1,
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  cursor: "pointer", "&:hover": { borderColor: "#1976d2" },
-                }}
-                onClick={() => {
-                  // pick first available
-                  onAdd(available[0])
-                }}
-              >
-                <AddIcon sx={{ color: "#1976d266" }} />
-              </Box>
-            </Tooltip>
-          )}
-        </Box>
-        {available.length > 0 && items.length < MAX_ITEMS && (
-          <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5, maxHeight: 120, overflowY: "auto" }}>
-            {available.map((inv) => (
-              <Tooltip key={inv.id} title={`${inv.items?.name} — RAP: $${Number(inv.items?.rap || 0).toFixed(2)}`}>
-                <Box
-                  component="img"
-                  src={inv.items?.image_url}
-                  alt={inv.items?.name}
-                  onClick={() => onAdd(inv)}
-                  sx={{
-                    width: 40, height: 40, objectFit: "contain", borderRadius: 1,
-                    border: `2px solid ${RARITY_COLORS[(inv.items?.rarity as Rarity) || "Common"]}44`,
-                    bgcolor: "#f8fbff", cursor: "pointer",
-                    "&:hover": { opacity: 0.8, transform: "scale(1.05)" },
-                    transition: "all 0.1s",
-                  }}
-                />
-              </Tooltip>
-            ))}
-          </Box>
-        )}
-        {items.length === MAX_ITEMS && (
-          <Typography variant="caption" color="text.secondary">Max {MAX_ITEMS} items reached</Typography>
-        )}
-      </Box>
-    )
-  }
-
   if (!user) {
     return (
       <Container maxWidth="md" sx={{ py: 6, textAlign: "center" }}>
@@ -452,6 +536,8 @@ export default function TradePage() {
   }
 
   const pendingReceived = trades.received.filter((t) => t.status === "pending").length
+  const offerVal = tradeValue(offerItems, Number(offerBalance) || 0)
+  const requestVal = tradeValue(requestItems, Number(requestBalance) || 0)
 
   return (
     <Container maxWidth="md" sx={{ py: 3 }}>
@@ -467,14 +553,14 @@ export default function TradePage() {
 
       <Box sx={{ borderBottom: 1, borderColor: "divider", mb: 3 }}>
         <Tabs value={tab} onChange={(_, v) => setTab(v)}>
-          <Tab label="Received" />
           <Tab
             label={
               <Badge badgeContent={pendingReceived} color="error">
-                <Box sx={{ pr: pendingReceived > 0 ? 1.5 : 0 }}>Sent</Box>
+                <Box sx={{ pr: pendingReceived > 0 ? 1.5 : 0 }}>Received</Box>
               </Badge>
             }
           />
+          <Tab label="Sent" />
         </Tabs>
       </Box>
 
@@ -523,6 +609,24 @@ export default function TradePage() {
           </Box>
 
           {createError && <Alert severity="error" sx={{ mb: 2 }}>{createError}</Alert>}
+
+          {/* Trade value summary */}
+          <Box
+            sx={{
+              display: "flex", justifyContent: "center", gap: 3, mb: 2,
+              p: 1.5, bgcolor: "#f0f7ff", borderRadius: 2,
+            }}
+          >
+            <Box textAlign="center">
+              <Typography variant="caption" color="text.secondary">You Offer</Typography>
+              <Typography variant="body2" fontWeight={700} color="primary.main">${offerVal.toFixed(2)}</Typography>
+            </Box>
+            <Divider orientation="vertical" flexItem />
+            <Box textAlign="center">
+              <Typography variant="caption" color="text.secondary">You Request</Typography>
+              <Typography variant="body2" fontWeight={700} color="primary.main">${requestVal.toFixed(2)}</Typography>
+            </Box>
+          </Box>
 
           <Grid container spacing={3}>
             <Grid item xs={12} sm={6}>
@@ -575,8 +679,8 @@ export default function TradePage() {
             variant="contained"
             onClick={handleCreateTrade}
             disabled={createLoading || !receiver || (offerItems.length === 0 && requestItems.length === 0 && !offerBalance && !requestBalance)}
-            startIcon={createLoading ? <CircularProgress size={14} /> : <SwapHorizIcon />}
           >
+            {createLoading ? <CircularProgress size={14} sx={{ mr: 1 }} /> : <SwapHorizIcon sx={{ mr: 0.5, fontSize: 18 }} />}
             Send Trade
           </Button>
         </DialogActions>
