@@ -43,19 +43,37 @@ function saveFilters(f: object) {
 export default function MarketplacePage() {
   const { user } = useAuth()
   const router = useRouter()
-  const saved = loadFilters()
 
   const [listings, setListings] = useState<Listing[]>([])
   const [loading, setLoading] = useState(true)
-  const [search, setSearch] = useState(saved?.search ?? "")
-  const [rarities, setRarities] = useState<string[]>(saved?.rarities ?? [])
-  const [minPrice, setMinPrice] = useState<string>(saved?.minPrice ?? "")
-  const [maxPrice, setMaxPrice] = useState<string>(saved?.maxPrice ?? "")
-  const [sellerSearch, setSellerSearch] = useState(saved?.sellerSearch ?? "")
-  const [sortBy, setSortBy] = useState(saved?.sortBy ?? "created_at")
-  const [ignoreOwn, setIgnoreOwn] = useState(saved?.ignoreOwn ?? false)
-  const [showSold, setShowSold] = useState(saved?.showSold ?? false)
+  const [search, setSearch] = useState("")
+  const [rarities, setRarities] = useState<string[]>([])
+  const [minPrice, setMinPrice] = useState<string>("")
+  const [maxPrice, setMaxPrice] = useState<string>("")
+  const [sellerSearch, setSellerSearch] = useState("")
+  const [sortBy, setSortBy] = useState("created_at")
+  const [ignoreOwn, setIgnoreOwn] = useState(false)
+  const [showSold, setShowSold] = useState(false)
   const [filterOpen, setFilterOpen] = useState(false)
+  const [hydrated, setHydrated] = useState(false)
+
+  // Hydrate filters from localStorage on client only — avoids SSR mismatch
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "null")
+      if (saved) {
+        if (saved.search) setSearch(saved.search)
+        if (saved.rarities) setRarities(saved.rarities)
+        if (saved.minPrice) setMinPrice(saved.minPrice)
+        if (saved.maxPrice) setMaxPrice(saved.maxPrice)
+        if (saved.sellerSearch) setSellerSearch(saved.sellerSearch)
+        if (saved.sortBy) setSortBy(saved.sortBy)
+        if (saved.ignoreOwn != null) setIgnoreOwn(saved.ignoreOwn)
+        if (saved.showSold != null) setShowSold(saved.showSold)
+      }
+    } catch {}
+    setHydrated(true)
+  }, [])
 
   // Persist filters on any change
   useEffect(() => {
@@ -95,10 +113,11 @@ export default function MarketplacePage() {
 
   const searchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null)
   useEffect(() => {
+    if (!hydrated) return  // wait for localStorage hydration before first fetch
     if (searchTimeout.current) clearTimeout(searchTimeout.current)
     searchTimeout.current = setTimeout(fetchListings, 300)
     return () => { if (searchTimeout.current) clearTimeout(searchTimeout.current) }
-  }, [fetchListings])
+  }, [fetchListings, hydrated])
 
   const fetchMyInventory = async () => {
     if (!user) return

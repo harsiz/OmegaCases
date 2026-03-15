@@ -10,6 +10,7 @@ import AddIcon from "@mui/icons-material/Add"
 import UploadIcon from "@mui/icons-material/Upload"
 import SaveIcon from "@mui/icons-material/Save"
 import { useAuth } from "@/lib/auth-context"
+import { createClient as createBrowserClient } from "@/lib/supabase/client"
 import type { Item, Rarity } from "@/lib/types"
 import { RARITY_COLORS } from "@/lib/types"
 import { useRouter } from "next/navigation"
@@ -108,12 +109,24 @@ export default function AdminPage() {
     setCapsError("")
     setCapsSuccess(false)
     try {
+      // Get session token from browser Supabase client for Authorization header
+      const browserDb = createBrowserClient()
+      const { data: { session } } = await browserDb.auth.getSession()
+      const token = session?.access_token
+      if (!token) throw new Error("Not authenticated")
+
       const res = await fetch("/api/admin/settings", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`,
+        },
         body: JSON.stringify({ key: "rarity_price_caps", value: caps }),
       })
-      if (!res.ok) throw new Error("Failed to save")
+      if (!res.ok) {
+        const body = await res.json()
+        throw new Error(body.error || "Failed to save")
+      }
       setCapsSuccess(true)
     } catch (e: any) {
       setCapsError(e.message)
