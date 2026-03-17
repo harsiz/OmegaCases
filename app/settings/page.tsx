@@ -13,21 +13,7 @@ import VolumeOffIcon from "@mui/icons-material/VolumeOff"
 import VolumeUpIcon from "@mui/icons-material/VolumeUp"
 import { useAuth } from "@/lib/auth-context"
 import { useRouter } from "next/navigation"
-
-export const MUTE_SOUNDS_KEY = "omegacases_mute_sounds"
-
-export function useMuteSounds() {
-  const [muted, setMuted] = useState(false)
-  useEffect(() => {
-    try { setMuted(localStorage.getItem(MUTE_SOUNDS_KEY) === "true") } catch {}
-  }, [])
-  const toggle = () => setMuted((prev) => {
-    const next = !prev
-    try { localStorage.setItem(MUTE_SOUNDS_KEY, String(next)) } catch {}
-    return next
-  })
-  return { muted, toggle }
-}
+import { useMuteSounds } from "@/lib/use-mute-sounds"
 
 export default function SettingsPage() {
   const { user, refreshUser } = useAuth()

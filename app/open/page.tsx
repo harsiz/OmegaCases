@@ -17,7 +17,7 @@ import ItemCard from "@/components/item-card"
 import type { Item, Rarity, CasePrice } from "@/lib/types"
 import { RARITY_COLORS, CASE_PRICES } from "@/lib/types"
 import NextLink from "next/link"
-import { useMuteSounds } from "@/app/settings/page"
+import { useMuteSounds } from "@/lib/use-mute-sounds"
 
 const CONFETTI_RARITIES: Rarity[] = ["Legendary", "Omega"]
 const CONFETTI_SRC = "https://hebbkx1anhila5yf.public.blob.vercel-storage.com/confetti-pop-sound-fNcAXWXi7MdyVXwS9yqsN7dqp9PhVx.mp3"
