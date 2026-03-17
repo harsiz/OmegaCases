@@ -30,7 +30,8 @@ export default function RootLayout({
         <MuiProvider>
           <Navbar />
           <div style={{ display: "flex", alignItems: "flex-start" }}>
-            <main style={{ flex: 1, minWidth: 0 }}>{children}</main>
+            {/* pb-[44px] on mobile so content isn't hidden behind the ticker bar */}
+            <main style={{ flex: 1, minWidth: 0 }} className="pb-[44px] lg:pb-0">{children}</main>
             <LiveRollsFeed />
           </div>
         </MuiProvider>
