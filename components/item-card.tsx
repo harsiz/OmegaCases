@@ -1,18 +1,18 @@
 "use client"
 
-import { Box, Chip, Typography, Tooltip } from "@mui/material"
+import { Box, Chip, Tooltip, Typography } from "@mui/material"
 import AccessTimeIcon from "@mui/icons-material/AccessTime"
 import type { Item, Rarity } from "@/lib/types"
 import { RARITY_COLORS, RARITY_GLOW } from "@/lib/types"
 
-interface Props {
+interface ItemCardProps {
   item: Item
   size?: "sm" | "md" | "lg"
   showPrice?: boolean
   onClick?: () => void
 }
 
-export default function ItemCard({ item, size = "md", showPrice = false, onClick }: Props) {
+function ItemCard({ item, size = "md", showPrice = false, onClick }: ItemCardProps) {
   const dims = size === "sm" ? 80 : size === "lg" ? 180 : 120
   const color = RARITY_COLORS[item.rarity as Rarity]
   const glow = RARITY_GLOW[item.rarity as Rarity]
@@ -101,3 +101,5 @@ export default function ItemCard({ item, size = "md", showPrice = false, onClick
     </Box>
   )
 }
+
+export default ItemCard
