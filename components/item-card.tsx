@@ -1,5 +1,5 @@
 "use client"
-
+// cache-bust: single-export-v3
 import { Box, Chip, Tooltip, Typography } from "@mui/material"
 import AccessTimeIcon from "@mui/icons-material/AccessTime"
 import type { Item, Rarity } from "@/lib/types"
@@ -12,10 +12,10 @@ interface ItemCardProps {
   onClick?: () => void
 }
 
-function ItemCard({ item, size = "md", showPrice = false, onClick }: ItemCardProps) {
+export default function ItemCard({ item, size = "md", showPrice = false, onClick }: ItemCardProps) {
   const dims = size === "sm" ? 80 : size === "lg" ? 180 : 120
-  const color = RARITY_COLORS[item.rarity as Rarity]
-  const glow = RARITY_GLOW[item.rarity as Rarity]
+  const color = RARITY_COLORS[item.rarity as Rarity] ?? "#9e9e9e"
+  const glow = RARITY_GLOW?.[item.rarity as Rarity] ?? "none"
 
   return (
     <Box
@@ -72,6 +72,7 @@ function ItemCard({ item, size = "md", showPrice = false, onClick }: ItemCardPro
           </Tooltip>
         )}
       </Box>
+
       <Chip
         label={item.rarity}
         size="small"
@@ -83,16 +84,24 @@ function ItemCard({ item, size = "md", showPrice = false, onClick }: ItemCardPro
           "& .MuiChip-label": { px: 0.8 },
         }}
       />
+
       <Tooltip title={item.name} placement="top" arrow>
         <Typography
           variant="caption"
           textAlign="center"
           fontWeight={600}
-          sx={{ lineHeight: 1.2, maxWidth: dims, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+          sx={{
+            lineHeight: 1.2,
+            maxWidth: dims,
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+          }}
         >
           {item.name}
         </Typography>
       </Tooltip>
+
       {showPrice && (
         <Typography variant="caption" color="primary.main" fontWeight={700}>
           ${Number(item.market_price).toFixed(2)}
@@ -101,5 +110,3 @@ function ItemCard({ item, size = "md", showPrice = false, onClick }: ItemCardPro
     </Box>
   )
 }
-
-export default ItemCard
