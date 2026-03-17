@@ -1,17 +1,18 @@
 "use client"
 
-import { Box, Chip, Typography, Tooltip } from "@mui/material"
+import { Box, Chip, Tooltip, Typography } from "@mui/material"
+import AccessTimeIcon from "@mui/icons-material/AccessTime"
 import type { Item, Rarity } from "@/lib/types"
 import { RARITY_COLORS, RARITY_GLOW } from "@/lib/types"
 
-interface Props {
+interface ItemCardProps {
   item: Item
   size?: "sm" | "md" | "lg"
   showPrice?: boolean
   onClick?: () => void
 }
 
-export default function ItemCard({ item, size = "md", showPrice = false, onClick }: Props) {
+function ItemCard({ item, size = "md", showPrice = false, onClick }: ItemCardProps) {
   const dims = size === "sm" ? 80 : size === "lg" ? 180 : 120
   const color = RARITY_COLORS[item.rarity as Rarity]
   const glow = RARITY_GLOW[item.rarity as Rarity]
@@ -28,26 +29,48 @@ export default function ItemCard({ item, size = "md", showPrice = false, onClick
         "&:hover": onClick ? { transform: "translateY(-2px)", transition: "transform 0.15s" } : {},
       }}
     >
-      <Box
-        sx={{
-          width: dims,
-          height: dims,
-          borderRadius: 2,
-          overflow: "hidden",
-          border: `2px solid ${color}`,
-          boxShadow: glow,
-          bgcolor: "#f0f7ff",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-        }}
-      >
+      <Box sx={{ position: "relative" }}>
         <Box
-          component="img"
-          src={item.image_url}
-          alt={item.name}
-          sx={{ width: "90%", height: "90%", objectFit: "contain" }}
-        />
+          sx={{
+            width: dims,
+            height: dims,
+            borderRadius: 2,
+            overflow: "hidden",
+            border: `2px solid ${color}`,
+            boxShadow: glow,
+            bgcolor: "#f0f7ff",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <Box
+            component="img"
+            src={item.image_url}
+            alt={item.name}
+            sx={{ width: "90%", height: "90%", objectFit: "contain" }}
+          />
+        </Box>
+        {item.limited_time && (
+          <Tooltip title="Limited time — not available in cases" placement="top" arrow>
+            <Box
+              sx={{
+                position: "absolute",
+                top: 4,
+                right: 4,
+                bgcolor: "rgba(0,0,0,0.6)",
+                borderRadius: "50%",
+                width: 20,
+                height: 20,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <AccessTimeIcon sx={{ fontSize: 13, color: "#ffd54f" }} />
+            </Box>
+          </Tooltip>
+        )}
       </Box>
       <Chip
         label={item.rarity}
@@ -78,3 +101,5 @@ export default function ItemCard({ item, size = "md", showPrice = false, onClick
     </Box>
   )
 }
+
+export default ItemCard

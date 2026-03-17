@@ -20,6 +20,7 @@ export interface Item {
   likelihood: number
   market_price: number
   rap: number
+  limited_time: boolean
   created_at: string
 }
 
@@ -91,10 +92,15 @@ export const RARITY_GLOW: Record<Rarity, string> = {
   Omega: "0 0 24px #f4433688",
 }
 
-export const CASE_PRICES = [
-  { qty: 10, price: 0.19 },
-  { qty: 100, price: 0.79 },
-  { qty: 1000, price: 7.99 },
+export type CasePrice = { qty: number; price: number }
+
+export const CASE_PRICES: CasePrice[] = [
+  { qty: 10, price: 0.39 },
+  { qty: 100, price: 2.99 },
+  { qty: 1000, price: 9.99 },
 ]
+
+// Only these rarities count toward inventory value
+export const VALUE_RARITIES: Rarity[] = ["Legendary", "Omega"]
 
 export const ACCEPTED_CRYPTOS = ["BTC", "LTC", "SOL", "BCH"]

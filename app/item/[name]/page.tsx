@@ -13,6 +13,7 @@ import NextLink from "next/link"
 import StorefrontIcon from "@mui/icons-material/Storefront"
 import PeopleIcon from "@mui/icons-material/People"
 import EmojiEventsIcon from "@mui/icons-material/EmojiEvents"
+import AccessTimeIcon from "@mui/icons-material/AccessTime"
 
 // Single dynamic import — avoids Turbopack multi-chunk split errors
 const SalesPriceChart = dynamic(() => import("@/components/sales-price-chart"), { ssr: false })
@@ -79,8 +80,17 @@ export default function ItemPage() {
         <Box sx={{ flex: 1 }}>
           <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1, flexWrap: "wrap" }}>
             <Typography variant="h4" fontWeight={800} color="text.primary">{item.name}</Typography>
-            {/* Only the rarity tag keeps its rarity color */}
             <Chip label={item.rarity} sx={{ bgcolor: rarityColor, color: "#fff", fontWeight: 700 }} />
+            {item.limited_time && (
+              <Tooltip title="Limited time — not available in cases" placement="top" arrow>
+                <Chip
+                  icon={<AccessTimeIcon sx={{ fontSize: "1rem !important", color: "#ffd54f !important" }} />}
+                  label="Limited Time"
+                  size="small"
+                  sx={{ bgcolor: "rgba(0,0,0,0.75)", color: "#ffd54f", fontWeight: 700, fontSize: "0.7rem" }}
+                />
+              </Tooltip>
+            )}
           </Box>
           <Typography color="text.secondary" sx={{ mb: 1 }}>
             RAP: <strong style={{ color: BLUE }}>${Number(item.rap).toFixed(2)}</strong>

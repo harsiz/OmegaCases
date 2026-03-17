@@ -14,6 +14,7 @@ import { RARITY_COLORS } from "@/lib/types"
 import type { Listing, Sale, Rarity } from "@/lib/types"
 import ArrowBackIcon from "@mui/icons-material/ArrowBack"
 import ShoppingCartIcon from "@mui/icons-material/ShoppingCart"
+import AccessTimeIcon from "@mui/icons-material/AccessTime"
 
 // Single dynamic import for the whole chart — avoids Turbopack multi-chunk split errors
 const SalesPriceChart = dynamic(() => import("@/components/sales-price-chart"), { ssr: false })
@@ -164,6 +165,16 @@ export default function ListingPage() {
               size="small"
               sx={{ bgcolor: rarityColor, color: "#fff", mb: 1 }}
             />
+            {item?.limited_time && (
+              <Tooltip title="Limited time — not available in cases" placement="top" arrow>
+                <Chip
+                  icon={<AccessTimeIcon sx={{ fontSize: "0.9rem !important", color: "#ffd54f !important" }} />}
+                  label="Limited Time"
+                  size="small"
+                  sx={{ bgcolor: "rgba(0,0,0,0.75)", color: "#ffd54f", fontWeight: 700, fontSize: "0.65rem", mb: 1, ml: 0.5 }}
+                />
+              </Tooltip>
+            )}
             <Typography
               variant="h5"
               fontWeight={800}

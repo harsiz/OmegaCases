@@ -31,7 +31,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "No cases remaining" }, { status: 402 })
   }
 
-  const { data: items } = await supabase.from("items").select("id, likelihood")
+  const { data: items } = await supabase
+    .from("items")
+    .select("id, likelihood")
+    .eq("limited_time", false)
   if (!items || items.length === 0) {
     return NextResponse.json({ error: "No items available" }, { status: 500 })
   }
@@ -55,6 +58,10 @@ export async function POST(request: Request) {
     .insert({ user_id, item_id: wonItemId })
 
   if (invError) return NextResponse.json({ error: invError.message }, { status: 500 })
+
+  // NOTE: rolls table insert is intentionally NOT done here.
+  // It is done client-side AFTER the spin animation ends, so the live feed
+  // never reveals the result before the roller sees it.
 
   // Set first_unboxed_by if this item has never been unboxed before
   await supabase

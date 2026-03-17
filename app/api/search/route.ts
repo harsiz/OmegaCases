@@ -9,7 +9,7 @@ export async function GET(request: Request) {
   const q = query.toLowerCase()
 
   // Items
-  let itemsQuery = db.from("items").select("id, name, image_url, rarity, rap, market_price, likelihood")
+  let itemsQuery = db.from("items").select("id, name, image_url, rarity, rap, market_price, likelihood, limited_time")
   if (q) itemsQuery = itemsQuery.ilike("name", `%${q}%`)
   const { data: items } = await itemsQuery.order("rap", { ascending: false }).limit(20)
 

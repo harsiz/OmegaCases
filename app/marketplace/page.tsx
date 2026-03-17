@@ -6,11 +6,12 @@ import {
   Chip, TextField, Select, MenuItem, FormControl, InputLabel,
   Button, Dialog, DialogTitle, DialogContent, DialogActions,
   CircularProgress, Alert, Drawer, List, ListItemButton, ListItemAvatar,
-  Avatar, ListItemText, Divider, Checkbox, FormControlLabel, Tooltip, Slider, Pagination,
+  Avatar, ListItemText, Divider, Checkbox, FormControlLabel, Tooltip, Slider,
 } from "@mui/material"
 import FilterListIcon from "@mui/icons-material/FilterList"
 import AddIcon from "@mui/icons-material/Add"
 import ArrowBackIcon from "@mui/icons-material/ArrowBack"
+import AccessTimeIcon from "@mui/icons-material/AccessTime"
 import { useAuth } from "@/lib/auth-context"
 import type { Listing, Rarity, InventoryItem } from "@/lib/types"
 import { RARITY_COLORS } from "@/lib/types"
@@ -46,8 +47,11 @@ export default function MarketplacePage() {
 
   const [listings, setListings] = useState<Listing[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
   const [page, setPage] = useState(0)
+  const [hasMore, setHasMore] = useState(true)
   const [totalListings, setTotalListings] = useState(0)
+  const sentinelRef = useRef<HTMLDivElement>(null)
   const [search, setSearch] = useState("")
   const [rarities, setRarities] = useState<string[]>([])
   const [minPrice, setMinPrice] = useState<string>("")
@@ -99,8 +103,9 @@ export default function MarketplacePage() {
   const [sellError, setSellError] = useState("")
   const [sellSuccess, setSellSuccess] = useState(false)
 
-  const fetchListings = useCallback(async () => {
-    setLoading(true)
+  const fetchListings = useCallback(async (pageNum: number, replace: boolean) => {
+    if (replace) setLoading(true)
+    else setLoadingMore(true)
     const params = new URLSearchParams()
     if (rarities.length > 0) params.set("rarity", rarities.join(","))
     if (minPrice) params.set("minPrice", minPrice)
@@ -110,21 +115,19 @@ export default function MarketplacePage() {
     if (ignoreOwn && user?.id) params.set("excludeSeller", user.id)
     if (showSold) params.set("showSold", "true")
     params.set("sortBy", sortBy)
-    params.set("page", String(page))
+    params.set("page", String(pageNum))
     const res = await fetch(`/api/listings?${params}`)
     const data = await res.json()
-    // API returns { listings, total, page, pageSize } when paginated
-    if (data && Array.isArray(data.listings)) {
-      setListings(data.listings)
-      setTotalListings(data.total ?? 0)
-    } else {
-      setListings(Array.isArray(data) ? data : [])
-      setTotalListings(0)
-    }
-    setLoading(false)
-  }, [rarities, minPrice, maxPrice, sortBy, search, sellerSearch, ignoreOwn, showSold, user?.id, page])
+    const newListings: Listing[] = Array.isArray(data.listings) ? data.listings : Array.isArray(data) ? data : []
+    const total = data.total ?? newListings.length
+    setTotalListings(total)
+    setListings((prev) => replace ? newListings : [...prev, ...newListings])
+    setHasMore(newListings.length === 24 && (pageNum + 1) * 24 < total)
+    if (replace) setLoading(false)
+    else setLoadingMore(false)
+  }, [rarities, minPrice, maxPrice, sortBy, search, sellerSearch, ignoreOwn, showSold, user?.id])
 
-  // Reset to page 0 whenever filters change (but not when page itself changes)
+  // Reset to page 0 and replace listings whenever filters change
   const prevFiltersRef = useRef({ rarities, minPrice, maxPrice, search, sellerSearch, sortBy, ignoreOwn, showSold })
   useEffect(() => {
     const prev = prevFiltersRef.current
@@ -134,17 +137,35 @@ export default function MarketplacePage() {
       prev.ignoreOwn !== ignoreOwn || prev.showSold !== showSold
     ) {
       setPage(0)
+      setHasMore(true)
       prevFiltersRef.current = { rarities, minPrice, maxPrice, search, sellerSearch, sortBy, ignoreOwn, showSold }
     }
   }, [rarities, minPrice, maxPrice, search, sellerSearch, sortBy, ignoreOwn, showSold])
 
   const searchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null)
   useEffect(() => {
-    if (!hydrated) return  // wait for localStorage hydration before first fetch
+    if (!hydrated) return
     if (searchTimeout.current) clearTimeout(searchTimeout.current)
-    searchTimeout.current = setTimeout(fetchListings, 300)
+    searchTimeout.current = setTimeout(() => fetchListings(0, true), 300)
     return () => { if (searchTimeout.current) clearTimeout(searchTimeout.current) }
   }, [fetchListings, hydrated])
+
+  // IntersectionObserver sentinel for infinite scroll
+  useEffect(() => {
+    if (!sentinelRef.current) return
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && hasMore && !loadingMore && !loading) {
+          const nextPage = page + 1
+          setPage(nextPage)
+          fetchListings(nextPage, false)
+        }
+      },
+      { rootMargin: "200px" }
+    )
+    observer.observe(sentinelRef.current)
+    return () => observer.disconnect()
+  }, [hasMore, loadingMore, loading, page, fetchListings])
 
   const fetchMyInventory = async () => {
     if (!user) return
@@ -225,7 +246,7 @@ export default function MarketplacePage() {
         if (!res.ok) throw new Error(data.error)
       }
       setSellSuccess(true)
-      fetchListings()
+      fetchListings(0, true)
     } catch (e: any) {
       setSellError(e.message)
     } finally {
@@ -261,7 +282,7 @@ export default function MarketplacePage() {
     sortBy, setSortBy,
     ignoreOwn, setIgnoreOwn,
     showSold, setShowSold,
-    onApply: fetchListings,
+    onApply: () => { setPage(0); setHasMore(true); fetchListings(0, true) },
   }
 
   return (
@@ -320,8 +341,22 @@ export default function MarketplacePage() {
                           "&:hover": { boxShadow: `0 4px 20px ${color}44`, transform: "translateY(-2px)", transition: "all 0.15s" },
                         }}
                       >
-                        <CardMedia component="img" image={item.image_url} alt={item.name}
-                          sx={{ height: 120, objectFit: "contain", p: 1, bgcolor: "#f8fbff" }} />
+                        <Box sx={{ position: "relative" }}>
+                          <CardMedia component="img" image={item.image_url} alt={item.name}
+                            sx={{ height: 120, objectFit: "contain", p: 1, bgcolor: "#f8fbff" }} />
+                          {item.limited_time && (
+                            <Tooltip title="Limited time — not available in cases" placement="top" arrow>
+                              <Box sx={{
+                                position: "absolute", top: 6, right: 6,
+                                bgcolor: "rgba(0,0,0,0.6)", borderRadius: "50%",
+                                width: 20, height: 20,
+                                display: "flex", alignItems: "center", justifyContent: "center",
+                              }}>
+                                <AccessTimeIcon sx={{ fontSize: 13, color: "#ffd54f" }} />
+                              </Box>
+                            </Tooltip>
+                          )}
+                        </Box>
                         <CardContent sx={{ py: 1, "&:last-child": { pb: 1 } }}>
                           <Chip label={item.rarity} size="small" sx={{ bgcolor: color, color: "#fff", mb: 0.5, fontSize: "0.6rem" }} />
                           <Tooltip title={item.name} placement="top" arrow>
@@ -343,18 +378,13 @@ export default function MarketplacePage() {
                   )
                 })}
               </Grid>
-              {totalListings > 24 && (
-                <Box sx={{ display: "flex", justifyContent: "center", mt: 4 }}>
-                  <Pagination
-                    count={Math.ceil(totalListings / 24)}
-                    page={page + 1}
-                    onChange={(_, p) => setPage(p - 1)}
-                    color="primary"
-                    showFirstButton
-                    showLastButton
-                  />
-                </Box>
-              )}
+              {/* Infinite scroll sentinel */}
+              <Box ref={sentinelRef} sx={{ height: 40, display: "flex", alignItems: "center", justifyContent: "center", mt: 2 }}>
+                {loadingMore && <CircularProgress size={24} />}
+                {!hasMore && listings.length > 0 && (
+                  <Typography variant="caption" color="text.secondary">All {totalListings} listings loaded</Typography>
+                )}
+              </Box>
             </>
           )}
         </Box>
