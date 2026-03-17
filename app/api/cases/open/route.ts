@@ -31,7 +31,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "No cases remaining" }, { status: 402 })
   }
 
-  const { data: items } = await supabase.from("items").select("id, likelihood")
+  const { data: items } = await supabase
+    .from("items")
+    .select("id, likelihood")
+    .eq("limited_time", false)
   if (!items || items.length === 0) {
     return NextResponse.json({ error: "No items available" }, { status: 500 })
   }

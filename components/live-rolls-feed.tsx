@@ -15,44 +15,95 @@ const RARITY_COLORS: Record<string, string> = {
 type Roll = {
   id: string
   created_at: string
-  users: { username: string; avatar_url: string | null } | null
-  items: { name: string; image_url: string | null; rarity: string; rap: number } | null
+  user_id: string
+  item_id: string
+  username?: string
+  item_name?: string
+  image_url?: string
+  rarity?: string
+  rap?: number
 }
 
 const MAX_ROLLS = 30
 
+async function fetchRollDetails(supabase: ReturnType<typeof createClient>, rollId: string): Promise<Roll | null> {
+  const { data } = await supabase
+    .from("rolls")
+    .select("id, created_at, user_id, item_id")
+    .eq("id", rollId)
+    .single()
+  if (!data) return null
+
+  const [userRes, itemRes] = await Promise.all([
+    supabase.from("users").select("username").eq("id", data.user_id).single(),
+    supabase.from("items").select("name, image_url, rarity, rap").eq("id", data.item_id).single(),
+  ])
+
+  return {
+    ...data,
+    username: userRes.data?.username ?? "anon",
+    item_name: itemRes.data?.name ?? "Unknown",
+    image_url: itemRes.data?.image_url ?? null,
+    rarity: itemRes.data?.rarity ?? "Common",
+    rap: itemRes.data?.rap ?? 0,
+  }
+}
+
+async function fetchRecentRolls(supabase: ReturnType<typeof createClient>): Promise<Roll[]> {
+  const { data } = await supabase
+    .from("rolls")
+    .select("id, created_at, user_id, item_id")
+    .order("created_at", { ascending: false })
+    .limit(20)
+  if (!data || data.length === 0) return []
+
+  const enriched = await Promise.all(
+    data.map(async (roll) => {
+      const [userRes, itemRes] = await Promise.all([
+        supabase.from("users").select("username").eq("id", roll.user_id).single(),
+        supabase.from("items").select("name, image_url, rarity, rap").eq("id", roll.item_id).single(),
+      ])
+      return {
+        ...roll,
+        username: userRes.data?.username ?? "anon",
+        item_name: itemRes.data?.name ?? "Unknown",
+        image_url: itemRes.data?.image_url ?? null,
+        rarity: itemRes.data?.rarity ?? "Common",
+        rap: itemRes.data?.rap ?? 0,
+      }
+    })
+  )
+  return enriched.reverse()
+}
+
 export default function LiveRollsFeed() {
   const [rolls, setRolls] = useState<Roll[]>([])
   const listRef = useRef<HTMLDivElement>(null)
+  const seenIds = useRef<Set<string>>(new Set())
 
   useEffect(() => {
     const supabase = createClient()
 
-    // Load initial recent rolls
-    supabase
-      .from("rolls")
-      .select("id, created_at, users(username, avatar_url), items(name, image_url, rarity, rap)")
-      .order("created_at", { ascending: false })
-      .limit(20)
-      .then(({ data }) => {
-        if (data) setRolls((data as Roll[]).reverse())
-      })
+    // Load initial rolls
+    fetchRecentRolls(supabase).then((initial) => {
+      initial.forEach((r) => seenIds.current.add(r.id))
+      setRolls(initial)
+    })
 
-    // Subscribe to realtime inserts
+    // Realtime subscription
     const channel = supabase
       .channel("rolls-live")
       .on(
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "rolls" },
         async (payload) => {
-          const { data } = await supabase
-            .from("rolls")
-            .select("id, created_at, users(username, avatar_url), items(name, image_url, rarity, rap)")
-            .eq("id", payload.new.id)
-            .single()
-          if (data) {
+          const id = payload.new.id as string
+          if (seenIds.current.has(id)) return
+          seenIds.current.add(id)
+          const roll = await fetchRollDetails(supabase, id)
+          if (roll) {
             setRolls((prev) => {
-              const next = [...prev, data as Roll]
+              const next = [...prev, roll]
               return next.slice(-MAX_ROLLS)
             })
           }
@@ -63,7 +114,7 @@ export default function LiveRollsFeed() {
     return () => { supabase.removeChannel(channel) }
   }, [])
 
-  // Auto-scroll to bottom when new rolls come in
+  // Auto-scroll to bottom when new roll arrives
   useEffect(() => {
     if (listRef.current) {
       listRef.current.scrollTop = listRef.current.scrollHeight
@@ -78,7 +129,7 @@ export default function LiveRollsFeed() {
         position: "sticky",
         top: 72,
         height: "calc(100vh - 80px)",
-        display: "flex",
+        display: { xs: "none", lg: "flex" },
         flexDirection: "column",
         bgcolor: "background.paper",
         borderLeft: "1px solid",
@@ -103,6 +154,9 @@ export default function LiveRollsFeed() {
           <Typography variant="caption" fontWeight={700} sx={{ textTransform: "uppercase", letterSpacing: 0.5 }}>
             Live Rolls
           </Typography>
+          <Typography variant="caption" color="text.secondary" sx={{ ml: "auto" }}>
+            {rolls.length}
+          </Typography>
         </Box>
       </Box>
 
@@ -114,7 +168,6 @@ export default function LiveRollsFeed() {
           overflowY: "auto",
           display: "flex",
           flexDirection: "column",
-          gap: 0,
           "&::-webkit-scrollbar": { width: 3 },
           "&::-webkit-scrollbar-thumb": { bgcolor: "divider", borderRadius: 2 },
         }}
@@ -125,7 +178,7 @@ export default function LiveRollsFeed() {
           </Typography>
         )}
         {rolls.map((roll) => {
-          const rarity = roll.items?.rarity ?? "Common"
+          const rarity = roll.rarity ?? "Common"
           const color = RARITY_COLORS[rarity] ?? "#9e9e9e"
           return (
             <Box
@@ -139,44 +192,30 @@ export default function LiveRollsFeed() {
                 borderBottom: "1px solid",
                 borderColor: "divider",
                 borderLeft: `3px solid ${color}`,
-                transition: "background 0.2s",
                 "&:hover": { bgcolor: "action.hover" },
               }}
             >
-              {/* Item image */}
               <Box
                 component="img"
-                src={roll.items?.image_url ?? "/placeholder.svg?width=32&height=32"}
-                alt={roll.items?.name ?? "item"}
+                src={roll.image_url ?? "/placeholder.svg?width=32&height=32"}
+                alt={roll.item_name ?? "item"}
                 sx={{ width: 32, height: 32, objectFit: "contain", flexShrink: 0, borderRadius: 1 }}
               />
               <Box sx={{ flex: 1, minWidth: 0 }}>
-                <Typography
-                  variant="caption"
-                  fontWeight={700}
-                  sx={{ display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color }}
-                >
-                  {roll.items?.name ?? "Unknown"}
+                <Typography variant="caption" fontWeight={700}
+                  sx={{ display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color }}>
+                  {roll.item_name}
                 </Typography>
-                <Typography
-                  variant="caption"
-                  color="text.secondary"
-                  sx={{ display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: "0.65rem" }}
-                >
-                  {roll.users?.username ?? "anon"}
+                <Typography variant="caption" color="text.secondary"
+                  sx={{ display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: "0.65rem" }}>
+                  {roll.username}
                 </Typography>
               </Box>
-              {roll.items?.rap != null && (
-                <Chip
-                  label={`$${Number(roll.items.rap).toFixed(0)}`}
-                  size="small"
+              {roll.rap != null && roll.rap > 0 && (
+                <Chip label={`$${Number(roll.rap).toFixed(0)}`} size="small"
                   sx={{
-                    height: 18,
-                    fontSize: "0.6rem",
-                    fontWeight: 700,
-                    bgcolor: color + "22",
-                    color,
-                    flexShrink: 0,
+                    height: 18, fontSize: "0.6rem", fontWeight: 700,
+                    bgcolor: color + "22", color, flexShrink: 0,
                     "& .MuiChip-label": { px: 0.75 },
                   }}
                 />
