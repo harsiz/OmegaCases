@@ -13,6 +13,7 @@ import { useAuth } from "@/lib/auth-context"
 import type { InventoryItem, Rarity } from "@/lib/types"
 import { RARITY_COLORS, VALUE_RARITIES } from "@/lib/types"
 import NextLink from "next/link"
+import AccessTimeIcon from "@mui/icons-material/AccessTime"
 
 type SortMode = "rap" | "latest"
 
@@ -314,7 +315,7 @@ export default function UserPage() {
                   <Box
                     component={NextLink}
                     href={`/item/${encodeURIComponent(item.name)}`}
-                    sx={{ display: "block", textDecoration: "none", color: "inherit" }}
+                    sx={{ display: "block", textDecoration: "none", color: "inherit", position: "relative" }}
                   >
                     <CardMedia
                       component="img"
@@ -322,6 +323,20 @@ export default function UserPage() {
                       alt={item.name}
                       sx={{ height: 110, objectFit: "contain", p: 1, bgcolor: "#f8fbff" }}
                     />
+                    {item.limited_time && (
+                      <Tooltip title="Limited time — not available in cases" placement="top" arrow>
+                        <Box
+                          sx={{
+                            position: "absolute", top: 6, right: 6,
+                            bgcolor: "rgba(0,0,0,0.6)", borderRadius: "50%",
+                            width: 20, height: 20,
+                            display: "flex", alignItems: "center", justifyContent: "center",
+                          }}
+                        >
+                          <AccessTimeIcon sx={{ fontSize: 13, color: "#ffd54f" }} />
+                        </Box>
+                      </Tooltip>
+                    )}
                     <CardContent sx={{ py: 1, "&:last-child": { pb: 1 } }}>
                       <Chip
                         label={item.rarity}

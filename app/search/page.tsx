@@ -5,9 +5,10 @@ import { useSearchParams, useRouter } from "next/navigation"
 import {
   Container, Box, Typography, TextField, InputAdornment,
   Grid, Card, CardContent, CardMedia, Chip, Avatar,
-  CircularProgress, Tabs, Tab,
+  CircularProgress, Tabs, Tab, Tooltip,
 } from "@mui/material"
 import SearchIcon from "@mui/icons-material/Search"
+import AccessTimeIcon from "@mui/icons-material/AccessTime"
 import NextLink from "next/link"
 import { RARITY_COLORS } from "@/lib/types"
 import type { Rarity } from "@/lib/types"
@@ -120,8 +121,22 @@ function SearchInner() {
                           "&:hover": { boxShadow: "0 4px 20px #1976d244", transform: "translateY(-2px)", transition: "all 0.15s" },
                         }}
                       >
-                        <CardMedia component="img" image={item.image_url} alt={item.name}
-                          sx={{ height: 120, objectFit: "contain", p: 1, bgcolor: "#f8fbff" }} />
+                        <Box sx={{ position: "relative" }}>
+                          <CardMedia component="img" image={item.image_url} alt={item.name}
+                            sx={{ height: 120, objectFit: "contain", p: 1, bgcolor: "#f8fbff" }} />
+                          {item.limited_time && (
+                            <Tooltip title="Limited time — not available in cases" placement="top" arrow>
+                              <Box sx={{
+                                position: "absolute", top: 6, right: 6,
+                                bgcolor: "rgba(0,0,0,0.6)", borderRadius: "50%",
+                                width: 20, height: 20,
+                                display: "flex", alignItems: "center", justifyContent: "center",
+                              }}>
+                                <AccessTimeIcon sx={{ fontSize: 13, color: "#ffd54f" }} />
+                              </Box>
+                            </Tooltip>
+                          )}
+                        </Box>
                         <CardContent sx={{ py: 1, "&:last-child": { pb: 1 } }}>
                           <Chip label={item.rarity} size="small"
                             sx={{ bgcolor: color, color: "#fff", mb: 0.5, fontSize: "0.6rem" }} />
@@ -198,8 +213,22 @@ function SearchInner() {
                           "&:hover": { boxShadow: "0 4px 20px #1976d244", transform: "translateY(-2px)", transition: "all 0.15s" },
                         }}
                       >
-                        <CardMedia component="img" image={item.image_url} alt={item.name}
-                          sx={{ height: 120, objectFit: "contain", p: 1, bgcolor: "#f8fbff" }} />
+                        <Box sx={{ position: "relative" }}>
+                          <CardMedia component="img" image={item.image_url} alt={item.name}
+                            sx={{ height: 120, objectFit: "contain", p: 1, bgcolor: "#f8fbff" }} />
+                          {(item as any).limited_time && (
+                            <Tooltip title="Limited time — not available in cases" placement="top" arrow>
+                              <Box sx={{
+                                position: "absolute", top: 6, right: 6,
+                                bgcolor: "rgba(0,0,0,0.6)", borderRadius: "50%",
+                                width: 20, height: 20,
+                                display: "flex", alignItems: "center", justifyContent: "center",
+                              }}>
+                                <AccessTimeIcon sx={{ fontSize: 13, color: "#ffd54f" }} />
+                              </Box>
+                            </Tooltip>
+                          )}
+                        </Box>
                         <CardContent sx={{ py: 1, "&:last-child": { pb: 1 } }}>
                           <Chip label={item.rarity} size="small"
                             sx={{ bgcolor: color, color: "#fff", mb: 0.5, fontSize: "0.6rem" }} />

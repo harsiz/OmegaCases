@@ -20,6 +20,7 @@ export interface Item {
   likelihood: number
   market_price: number
   rap: number
+  limited_time: boolean
   created_at: string
 }
 
