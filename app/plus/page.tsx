@@ -184,7 +184,7 @@ export default function PlusPage() {
         <Box>
           <Box sx={{ display: "flex", alignItems: "baseline", gap: 1.5, mb: 0.5 }}>
             <Typography variant="h4" fontWeight={800} sx={{ color: PLUS_COLOR }}>
-              $4.99
+              $2.99
             </Typography>
             <Typography variant="body2" color="text.secondary">one-time, from your balance</Typography>
           </Box>
@@ -209,7 +209,7 @@ export default function PlusPage() {
               startIcon={<WorkspacePremiumIcon />}
               sx={{ bgcolor: PLUS_COLOR, "&:hover": { bgcolor: "#d97706" }, fontWeight: 700 }}
             >
-              Get Plus — $4.99
+              Get Plus — $2.99
             </Button>
           )}
 
@@ -244,11 +244,11 @@ export default function PlusPage() {
         </DialogTitle>
         <DialogContent>
           <Typography gutterBottom>
-            <strong>$4.99</strong> will be taken from your balance. This can&apos;t be undone.
+            <strong>$2.99</strong> will be taken from your balance. This can&apos;t be undone.
           </Typography>
           <Box sx={{ p: 1.5, bgcolor: "#fffbeb", borderRadius: 1, border: "1px solid #f59e0b44", mt: 1 }}>
             <Typography variant="body2">Balance: <strong>${Number(user?.balance ?? 0).toFixed(2)}</strong></Typography>
-            <Typography variant="body2">Cost: <strong style={{ color: PLUS_COLOR }}>-$4.99</strong></Typography>
+            <Typography variant="body2">Cost: <strong style={{ color: PLUS_COLOR }}>-$2.99</strong></Typography>
             <Divider sx={{ my: 0.75 }} />
             <Typography variant="body2" fontWeight={700}>
               After: ${Math.max(0, Number(user?.balance ?? 0) - PLUS_PRICE).toFixed(2)}
@@ -265,7 +265,7 @@ export default function PlusPage() {
             startIcon={buying ? <CircularProgress size={14} sx={{ color: "inherit" }} /> : <LockOpenIcon />}
             sx={{ bgcolor: PLUS_COLOR, "&:hover": { bgcolor: "#d97706" }, fontWeight: 700 }}
           >
-            {buying ? "Processing..." : "Confirm — $4.99"}
+            {buying ? "Processing..." : "Confirm — $2.99"}
           </Button>
         </DialogActions>
       </Dialog>

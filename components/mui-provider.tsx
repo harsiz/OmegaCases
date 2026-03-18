@@ -68,8 +68,7 @@ function buildTheme(mode: "light" | "dark") {
 // Handles emotion SSR style injection correctly in Next.js App Router
 function EmotionCacheProvider({ children }: { children: React.ReactNode }) {
   const [{ cache, flush }] = React.useState(() => {
-    const cache = createCache({ key: "mui" })
-    cache.compat = true
+    const cache = createCache({ key: "mui", prepend: true })
     const prevInsert = cache.insert.bind(cache)
     let inserted: { name: string; isGlobal: boolean }[] = []
     cache.insert = (...args) => {
