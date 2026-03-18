@@ -1,4 +1,5 @@
 "use client"
+// mui-provider v4 — ThemeContext + dark mode + emotion cache
 
 import * as React from "react"
 import { createTheme, ThemeProvider, CssBaseline } from "@mui/material"
