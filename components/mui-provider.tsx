@@ -49,6 +49,15 @@ function buildTheme(mode: "light" | "dark") {
         styleOverrides: { root: { borderRadius: 12, boxShadow: "0 2px 12px rgba(25,118,210,0.08)" } },
       },
       MuiChip: { styleOverrides: { root: { fontWeight: 600 } } },
+      MuiCssBaseline: {
+        styleOverrides: (theme: any) => ({
+          body: {
+            backgroundColor: theme.palette.background.default,
+            color: theme.palette.text.primary,
+            transition: "background-color 0.2s, color 0.2s",
+          },
+        }),
+      },
     },
   })
 }

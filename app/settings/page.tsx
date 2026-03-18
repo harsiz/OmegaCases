@@ -231,7 +231,8 @@ export default function SettingsPage() {
               </Tooltip>
             </Box>
 
-            <Divider /> variant="contained" size="large" onClick={handleSave} disabled={saving} sx={{ fontWeight: 700, display: "flex", gap: 1, alignItems: "center" }}>
+            <Divider />
+            <Button variant="contained" size="large" onClick={handleSave} disabled={saving} sx={{ fontWeight: 700, display: "flex", gap: 1, alignItems: "center" }}>
               {saving && <CircularProgress size={16} sx={{ color: "inherit" }} />}
               {saving ? "Saving..." : "Save Changes"}
             </Button>
