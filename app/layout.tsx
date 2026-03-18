@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next'
 import { Analytics } from '@vercel/analytics/next'
+import { ThemeProvider as NextThemesProvider } from 'next-themes'
 import MuiProvider from '@/components/mui-provider'
 import Navbar from '@/components/navbar'
 import LiveRollsFeed from '@/components/live-rolls-feed'
@@ -27,14 +28,15 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body suppressHydrationWarning>
-        <MuiProvider>
-          <Navbar />
-          <div style={{ display: "flex", alignItems: "flex-start" }}>
-            {/* pb-[44px] on mobile so content isn't hidden behind the ticker bar */}
-            <main style={{ flex: 1, minWidth: 0 }} className="pb-[44px] lg:pb-0">{children}</main>
-            <LiveRollsFeed />
-          </div>
-        </MuiProvider>
+        <NextThemesProvider attribute="class" defaultTheme="light" enableSystem={false}>
+          <MuiProvider>
+            <Navbar />
+            <div style={{ display: "flex", alignItems: "flex-start" }}>
+              <main style={{ flex: 1, minWidth: 0 }} className="pb-[44px] lg:pb-0">{children}</main>
+              <LiveRollsFeed />
+            </div>
+          </MuiProvider>
+        </NextThemesProvider>
         <Analytics />
       </body>
     </html>

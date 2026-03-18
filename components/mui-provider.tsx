@@ -1,7 +1,8 @@
 "use client"
-
+// v6 — no emotion cache import, theme from next-themes
 import * as React from "react"
-import { createTheme, ThemeProvider, CssBaseline } from "@mui/material"
+import { ThemeProvider, createTheme, CssBaseline } from "@mui/material"
+import { useTheme } from "next-themes"
 import { AuthProvider } from "@/lib/auth-context"
 
 interface ThemeContextValue {
@@ -18,68 +19,50 @@ export function useThemeMode() {
   return React.useContext(ThemeContext)
 }
 
-export default function MuiProvider({ children }: { children: React.ReactNode }) {
-  const [mode, setMode] = React.useState<"light" | "dark">("light")
+function buildTheme(mode: "light" | "dark") {
+  return createTheme({
+    palette: {
+      mode,
+      primary: { main: "#1976d2", light: "#42a5f5", dark: "#1565c0" },
+      secondary: { main: "#e3f2fd" },
+      background: {
+        default: mode === "light" ? "#ffffff" : "#0d1b2a",
+        paper:   mode === "light" ? "#f8fbff" : "#132233",
+      },
+      text: {
+        primary:   mode === "light" ? "#0d1b2a" : "#e8f0fe",
+        secondary: mode === "light" ? "#546e7a" : "#90a4ae",
+      },
+    },
+    typography: {
+      fontFamily: '"Roboto","Helvetica","Arial",sans-serif',
+      h1: { fontWeight: 700 }, h2: { fontWeight: 700 },
+      h3: { fontWeight: 600 }, h4: { fontWeight: 600 },
+      h5: { fontWeight: 600 }, h6: { fontWeight: 600 },
+    },
+    shape: { borderRadius: 10 },
+    components: {
+      MuiButton: {
+        styleOverrides: { root: { textTransform: "none", fontWeight: 600, borderRadius: 8 } },
+      },
+      MuiCard: {
+        styleOverrides: { root: { borderRadius: 12, boxShadow: "0 2px 12px rgba(25,118,210,0.08)" } },
+      },
+      MuiChip: { styleOverrides: { root: { fontWeight: 600 } } },
+    },
+  })
+}
 
-  React.useEffect(() => {
-    try {
-      const saved = localStorage.getItem("omegacases_theme") as "light" | "dark" | null
-      if (saved === "dark" || saved === "light") setMode(saved)
-    } catch {}
-  }, [])
+// Separate inner component so it can safely use useTheme (client-only)
+function ThemeInner({ children }: { children: React.ReactNode }) {
+  const { resolvedTheme, setTheme } = useTheme()
+  const mode = resolvedTheme === "dark" ? "dark" : "light"
+
+  const theme = React.useMemo(() => buildTheme(mode), [mode])
 
   const toggleMode = React.useCallback(() => {
-    setMode((prev) => {
-      const next = prev === "light" ? "dark" : "light"
-      try { localStorage.setItem("omegacases_theme", next) } catch {}
-      return next
-    })
-  }, [])
-
-  const theme = React.useMemo(
-    () =>
-      createTheme({
-        palette: {
-          mode,
-          primary: { main: "#1976d2", light: "#42a5f5", dark: "#1565c0" },
-          secondary: { main: "#e3f2fd" },
-          background: {
-            default: mode === "light" ? "#ffffff" : "#0d1b2a",
-            paper:   mode === "light" ? "#f8fbff" : "#132233",
-          },
-          text: {
-            primary:   mode === "light" ? "#0d1b2a" : "#e8f0fe",
-            secondary: mode === "light" ? "#546e7a" : "#90a4ae",
-          },
-        },
-        typography: {
-          fontFamily: '"Roboto", "Helvetica", "Arial", sans-serif',
-          h1: { fontWeight: 700 },
-          h2: { fontWeight: 700 },
-          h3: { fontWeight: 600 },
-          h4: { fontWeight: 600 },
-          h5: { fontWeight: 600 },
-          h6: { fontWeight: 600 },
-        },
-        shape: { borderRadius: 10 },
-        components: {
-          MuiButton: {
-            styleOverrides: {
-              root: { textTransform: "none", fontWeight: 600, borderRadius: 8 },
-            },
-          },
-          MuiCard: {
-            styleOverrides: {
-              root: { borderRadius: 12, boxShadow: "0 2px 12px rgba(25,118,210,0.08)" },
-            },
-          },
-          MuiChip: {
-            styleOverrides: { root: { fontWeight: 600 } },
-          },
-        },
-      }),
-    [mode]
-  )
+    setTheme(mode === "dark" ? "light" : "dark")
+  }, [mode, setTheme])
 
   return (
     <ThemeContext.Provider value={{ mode, toggleMode }}>
@@ -89,4 +72,8 @@ export default function MuiProvider({ children }: { children: React.ReactNode })
       </ThemeProvider>
     </ThemeContext.Provider>
   )
+}
+
+export default function MuiProvider({ children }: { children: React.ReactNode }) {
+  return <ThemeInner>{children}</ThemeInner>
 }
