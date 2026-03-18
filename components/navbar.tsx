@@ -5,7 +5,7 @@ import NextLink from "next/link"
 import { useRouter } from "next/navigation"
 import {
   AppBar, Toolbar, Box, Button, Typography, IconButton,
-  Avatar, Menu, MenuItem, Chip, Divider,
+  Avatar, Menu, MenuItem, Chip, Divider, Tooltip,
   Drawer, List, ListItem, ListItemText, ListItemButton,
   Badge, InputBase,
 } from "@mui/material"
@@ -199,12 +199,13 @@ export default function Navbar() {
               user ? (
                 <>
                   {user.plus && (
-                    <IconButton onClick={toggleMode} size="small" title={mode === "dark" ? "Switch to light mode" : "Switch to dark mode"}>
-                      {mode === "dark"
-                        ? <LightModeIcon sx={{ fontSize: 20, color: "#f59e0b" }} />
-                        : <DarkModeIcon sx={{ fontSize: 20, color: "#546e7a" }} />
-                      }
-                    </IconButton>
+                    <Tooltip title="Under maintenance" placement="bottom" arrow>
+                      <span>
+                        <IconButton size="small" disabled sx={{ opacity: 0.4 }}>
+                          <DarkModeIcon sx={{ fontSize: 20, color: "text.disabled" }} />
+                        </IconButton>
+                      </span>
+                    </Tooltip>
                   )}
                   <IconButton onClick={handleUserMenu} size="small" sx={{ flexShrink: 0 }}>
                     {user.profile_picture ? (
