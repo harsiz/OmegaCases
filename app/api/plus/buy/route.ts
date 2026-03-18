@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 
-const PLUS_PRICE = 4.99
+const PLUS_PRICE = 2.99
 const PLUS_BONUS_CASES = 250
 
 export async function POST(req: Request) {
@@ -19,7 +19,7 @@ export async function POST(req: Request) {
   if (userError || !user) return NextResponse.json({ error: "User not found" }, { status: 404 })
   if (user.plus) return NextResponse.json({ error: "You already have OmegaCases Plus" }, { status: 400 })
   if (Number(user.balance) < PLUS_PRICE)
-    return NextResponse.json({ error: "Insufficient balance. You need $4.99." }, { status: 400 })
+    return NextResponse.json({ error: "Insufficient balance. You need $2.99." }, { status: 400 })
 
   const { data: updated, error: updateError } = await db
     .from("users")

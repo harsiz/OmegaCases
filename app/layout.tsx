@@ -4,6 +4,7 @@ import { ThemeProvider as NextThemesProvider } from 'next-themes'
 import MuiProvider from '@/components/mui-provider'
 import Navbar from '@/components/navbar'
 import LiveRollsFeed from '@/components/live-rolls-feed'
+import DiscountBanner from '@/components/discount-banner'
 import './globals.css'
 
 export const metadata: Metadata = {
@@ -31,6 +32,7 @@ export default function RootLayout({
         <NextThemesProvider attribute="class" defaultTheme="light" enableSystem={false}>
           <MuiProvider>
             <Navbar />
+            <DiscountBanner />
             <div style={{ display: "flex", alignItems: "flex-start" }}>
               <main style={{ flex: 1, minWidth: 0, backgroundColor: "inherit" }} className="pb-[44px] lg:pb-0">{children}</main>
               <LiveRollsFeed />

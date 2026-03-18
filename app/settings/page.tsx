@@ -188,47 +188,26 @@ export default function SettingsPage() {
 
             <Divider />
 
-            {/* Dark mode — Plus only */}
-            <Box>
+            {/* Dark mode — under maintenance */}
+            <Box sx={{ opacity: 0.45, pointerEvents: "none", userSelect: "none" }}>
               <Typography variant="subtitle2" fontWeight={600} gutterBottom sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
-                {mode === "dark"
-                  ? <DarkModeIcon fontSize="small" sx={{ color: "#f59e0b" }} />
-                  : <LightModeIcon fontSize="small" sx={{ color: "primary.main" }} />
-                }
+                <DarkModeIcon fontSize="small" sx={{ color: "text.disabled" }} />
                 Theme
-                {!user.plus && <LockIcon fontSize="small" sx={{ ml: 0.5, color: "text.disabled", fontSize: "0.8rem" }} />}
+                <Chip label="Under Maintenance" size="small" sx={{ ml: 1, fontSize: "0.65rem", height: 18, bgcolor: "grey.300", color: "grey.700" }} />
               </Typography>
-              <Tooltip
-                title={!user.plus ? "OmegaCases Plus required to unlock dark mode" : ""}
-                placement="top"
-                arrow
-              >
-                <Paper variant="outlined" sx={{ px: 2, py: 1.5, borderRadius: 2, opacity: user.plus ? 1 : 0.55 }}>
-                  <FormControlLabel
-                    control={
-                      <Switch
-                        checked={mode === "dark"}
-                        onChange={toggleMode}
-                        disabled={!user.plus}
-                        color="warning"
-                      />
-                    }
-                    label={
-                      <Box>
-                        <Typography variant="body2" fontWeight={600}>Dark Mode</Typography>
-                        <Typography variant="caption" color="text.secondary">
-                          {user.plus
-                            ? "Switch the entire site to a dark theme"
-                            : <>Unlock with <Box component={NextLink} href="/plus" sx={{ color: "#f59e0b", fontWeight: 700 }}>OmegaCases Plus</Box></>
-                          }
-                        </Typography>
-                      </Box>
-                    }
-                    sx={{ m: 0, width: "100%" }}
-                    labelPlacement="start"
-                  />
-                </Paper>
-              </Tooltip>
+              <Paper variant="outlined" sx={{ px: 2, py: 1.5, borderRadius: 2 }}>
+                <FormControlLabel
+                  control={<Switch disabled color="warning" />}
+                  label={
+                    <Box>
+                      <Typography variant="body2" fontWeight={600}>Dark Mode</Typography>
+                      <Typography variant="caption" color="text.secondary">Currently under maintenance — check back soon.</Typography>
+                    </Box>
+                  }
+                  sx={{ m: 0, width: "100%" }}
+                  labelPlacement="start"
+                />
+              </Paper>
             </Box>
 
             <Divider />

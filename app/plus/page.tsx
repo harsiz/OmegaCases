@@ -19,7 +19,7 @@ import LockOpenIcon from "@mui/icons-material/LockOpen"
 import { useAuth } from "@/lib/auth-context"
 import { useRouter } from "next/navigation"
 
-const PLUS_PRICE = 4.99
+const PLUS_PRICE = 2.99
 const PLUS_COLOR = "#f59e0b"
 
 const BENEFITS = [

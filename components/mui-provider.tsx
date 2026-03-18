@@ -1,7 +1,10 @@
 "use client"
-// v6 — no emotion cache import, theme from next-themes
+// v7 — correct emotion SSR with useServerInsertedHTML
 import * as React from "react"
+import { useServerInsertedHTML } from "next/navigation"
 import { ThemeProvider, createTheme, CssBaseline } from "@mui/material"
+import createCache from "@emotion/cache"
+import { CacheProvider } from "@emotion/react"
 import { useTheme } from "next-themes"
 import { AuthProvider } from "@/lib/auth-context"
 
@@ -62,16 +65,75 @@ function buildTheme(mode: "light" | "dark") {
   })
 }
 
-// Separate inner component so it can safely use useTheme (client-only)
+// Handles emotion SSR style injection correctly in Next.js App Router
+function EmotionCacheProvider({ children }: { children: React.ReactNode }) {
+  const [{ cache, flush }] = React.useState(() => {
+    const cache = createCache({ key: "mui" })
+    cache.compat = true
+    const prevInsert = cache.insert.bind(cache)
+    let inserted: { name: string; isGlobal: boolean }[] = []
+    cache.insert = (...args) => {
+      const serialized = args[1]
+      if (cache.inserted[serialized.name] === undefined) {
+        inserted.push({ name: serialized.name, isGlobal: !args[0] })
+      }
+      return prevInsert(...args)
+    }
+    function flush() {
+      const prevInserted = inserted
+      inserted = []
+      return prevInserted
+    }
+    return { cache, flush }
+  })
+
+  useServerInsertedHTML(() => {
+    const inserted = flush()
+    if (!inserted.length) return null
+    let styles = ""
+    let dataEmotionAttribute = cache.key
+    const globals: { name: string; style: string }[] = []
+    for (const { name, isGlobal } of inserted) {
+      const style = cache.inserted[name]
+      if (typeof style !== "boolean") {
+        if (isGlobal) {
+          globals.push({ name, style })
+        } else {
+          styles += style
+          dataEmotionAttribute += ` ${name}`
+        }
+      }
+    }
+    return (
+      <React.Fragment>
+        {globals.map(({ name, style }) => (
+          <style
+            key={name}
+            data-emotion={`${cache.key}-global ${name}`}
+            dangerouslySetInnerHTML={{ __html: style }}
+          />
+        ))}
+        {styles && (
+          <style
+            data-emotion={dataEmotionAttribute}
+            dangerouslySetInnerHTML={{ __html: styles }}
+          />
+        )}
+      </React.Fragment>
+    )
+  })
+
+  return <CacheProvider value={cache}>{children}</CacheProvider>
+}
+
+// Inner component reads next-themes and builds the MUI theme
 function ThemeInner({ children }: { children: React.ReactNode }) {
   const { resolvedTheme, setTheme } = useTheme()
   const [mounted, setMounted] = React.useState(false)
-
   React.useEffect(() => { setMounted(true) }, [])
 
-  // Always "light" on first render to match server — swaps after mount
+  // Always light on first render to match server HTML
   const mode: "light" | "dark" = mounted && resolvedTheme === "dark" ? "dark" : "light"
-
   const theme = React.useMemo(() => buildTheme(mode), [mode])
 
   const toggleMode = React.useCallback(() => {
@@ -89,5 +151,9 @@ function ThemeInner({ children }: { children: React.ReactNode }) {
 }
 
 export default function MuiProvider({ children }: { children: React.ReactNode }) {
-  return <ThemeInner>{children}</ThemeInner>
+  return (
+    <EmotionCacheProvider>
+      <ThemeInner>{children}</ThemeInner>
+    </EmotionCacheProvider>
+  )
 }
