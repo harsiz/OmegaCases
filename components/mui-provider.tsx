@@ -65,7 +65,12 @@ function buildTheme(mode: "light" | "dark") {
 // Separate inner component so it can safely use useTheme (client-only)
 function ThemeInner({ children }: { children: React.ReactNode }) {
   const { resolvedTheme, setTheme } = useTheme()
-  const mode = resolvedTheme === "dark" ? "dark" : "light"
+  const [mounted, setMounted] = React.useState(false)
+
+  React.useEffect(() => { setMounted(true) }, [])
+
+  // Always "light" on first render to match server — swaps after mount
+  const mode: "light" | "dark" = mounted && resolvedTheme === "dark" ? "dark" : "light"
 
   const theme = React.useMemo(() => buildTheme(mode), [mode])
 
