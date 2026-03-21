@@ -68,14 +68,11 @@ export default function AdminPage() {
   const saveBanner = async () => {
     setBannerSaving(true); setBannerError(""); setBannerSuccess(false)
     try {
-      const browserDb = createBrowserClient()
-      const { data: { session } } = await browserDb.auth.getSession()
-      const token = session?.access_token
-      if (!token) throw new Error("Not authenticated")
+      if (!user?.id) throw new Error("Not authenticated")
       const res = await fetch("/api/admin/settings", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
-        body: JSON.stringify({ key: "banner", value: { text: bannerText.trim(), color: bannerColor } }),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key: "banner", value: { text: bannerText.trim(), color: bannerColor }, user_id: user.id }),
       })
       if (!res.ok) { const b = await res.json(); throw new Error(b.error || "Failed") }
       setBannerSuccess(true)
@@ -136,19 +133,11 @@ export default function AdminPage() {
     setCapsError("")
     setCapsSuccess(false)
     try {
-      // Get session token from browser Supabase client for Authorization header
-      const browserDb = createBrowserClient()
-      const { data: { session } } = await browserDb.auth.getSession()
-      const token = session?.access_token
-      if (!token) throw new Error("Not authenticated")
-
+      if (!user?.id) throw new Error("Not authenticated")
       const res = await fetch("/api/admin/settings", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`,
-        },
-        body: JSON.stringify({ key: "rarity_price_caps", value: caps }),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key: "rarity_price_caps", value: caps, user_id: user.id }),
       })
       if (!res.ok) {
         const body = await res.json()
