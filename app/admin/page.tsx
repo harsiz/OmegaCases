@@ -72,6 +72,27 @@ export default function AdminPage() {
   const [cpSuccess, setCpSuccess] = useState(false)
   const [cpError, setCpError] = useState("")
 
+  // Payments paused state
+  const [paymentsPaused, setPaymentsPaused] = useState(true)
+  const [ppSaving, setPpSaving] = useState(false)
+  const [ppSuccess, setPpSuccess] = useState(false)
+  const [ppError, setPpError] = useState("")
+
+  const savePaymentsPaused = async (val: boolean) => {
+    setPpSaving(true); setPpError(""); setPpSuccess(false)
+    try {
+      if (!user?.id) throw new Error("Not authenticated")
+      const res = await fetch("/api/admin/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key: "payments_paused", value: val, user_id: user.id }),
+      })
+      if (!res.ok) { const b = await res.json(); throw new Error(b.error || "Failed") }
+      setPaymentsPaused(val)
+      setPpSuccess(true)
+    } catch (e: any) { setPpError(e.message) } finally { setPpSaving(false) }
+  }
+
   const saveCasePrices = async () => {
     setCpSaving(true); setCpError(""); setCpSuccess(false)
     try {
@@ -146,6 +167,7 @@ export default function AdminPage() {
       if (Array.isArray(data.case_prices) && data.case_prices.length > 0) setCasePrices(data.case_prices)
       if (data.banner?.text !== undefined) setBannerText(data.banner.text)
       if (data.banner?.color) setBannerColor(data.banner.color)
+      if (typeof data.payments_paused === "boolean") setPaymentsPaused(data.payments_paused)
     } catch {}
     setCapsLoading(false)
   }
@@ -428,6 +450,35 @@ export default function AdminPage() {
         <Card sx={{ maxWidth: 480 }}>
           <CardContent>
             <Typography variant="h6" fontWeight={700} gutterBottom>Game Settings</Typography>
+
+            {/* Payments Toggle */}
+            <Box sx={{ mb: 4, p: 2, border: "1px solid", borderColor: paymentsPaused ? "error.light" : "success.light", borderRadius: 2, bgcolor: paymentsPaused ? "rgba(211,47,47,0.05)" : "rgba(46,125,50,0.05)" }}>
+              <Typography variant="subtitle2" fontWeight={700} gutterBottom>Deposits &amp; Withdrawals</Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+                When paused, all deposit and withdrawal requests are rejected with a maintenance message.
+              </Typography>
+              <Box sx={{ display: "flex", alignItems: "center", gap: 2, flexWrap: "wrap" }}>
+                <Chip
+                  label={paymentsPaused ? "PAUSED" : "ACTIVE"}
+                  color={paymentsPaused ? "error" : "success"}
+                  size="small"
+                  sx={{ fontWeight: 700 }}
+                />
+                <Button
+                  variant="contained"
+                  color={paymentsPaused ? "success" : "error"}
+                  size="small"
+                  disabled={ppSaving}
+                  onClick={() => savePaymentsPaused(!paymentsPaused)}
+                  startIcon={ppSaving ? <CircularProgress size={14} sx={{ color: "inherit" }} /> : null}
+                >
+                  {ppSaving ? "Saving..." : paymentsPaused ? "Resume Payments" : "Pause Payments"}
+                </Button>
+              </Box>
+              {ppError && <Alert severity="error" sx={{ mt: 1 }}>{ppError}</Alert>}
+              {ppSuccess && <Alert severity="success" sx={{ mt: 1 }}>Payments setting saved!</Alert>}
+            </Box>
+
             <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
               Set the maximum listing price allowed per rarity on the marketplace.
             </Typography>
