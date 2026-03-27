@@ -14,10 +14,21 @@ export async function POST(request: Request) {
     .from("users")
     .select("*")
     .eq("id", user_id)
-    .eq("session_token", session_token)
     .single()
 
   if (!user) {
+    return NextResponse.json({ valid: false }, { status: 401 })
+  }
+
+  // If user has no session_token yet (legacy user), accept the login but don't validate token
+  // This allows pre-migration users to stay logged in while we generate tokens going forward
+  if (!user.session_token) {
+    const { password: _pw, session_token: _st, ...safeUser } = user
+    return NextResponse.json({ valid: true, user: safeUser, legacyUser: true })
+  }
+
+  // If user has a session_token, it must match
+  if (user.session_token !== session_token) {
     return NextResponse.json({ valid: false }, { status: 401 })
   }
 
