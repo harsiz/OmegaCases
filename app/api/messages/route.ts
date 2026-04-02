@@ -90,19 +90,56 @@ export async function POST(req: NextRequest) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  // Notify DM recipient
+  // Fetch sender name once for all notifications below
+  const { data: senderData } = await db
+    .from("users")
+    .select("username")
+    .eq("id", sender_id)
+    .single()
+  const senderName = senderData?.username ?? "Someone"
+
   if (type === "dm" && receiver_id) {
-    const { data: sender } = await db
-      .from("users")
-      .select("username")
-      .eq("id", sender_id)
-      .single()
+    // ── DM notification ──────────────────────────────────────────────────────
     await db.from("notifications").insert({
       user_id: receiver_id,
       type: "dm",
-      message: `New message from ${sender?.username ?? "someone"}`,
+      title: "New Message",
+      body: `${senderName} sent you a message`,
+      link: `/chat?with=${sender_id}`,
       read: false,
     })
+  } else if (type === "public") {
+    // ── @mention notifications ────────────────────────────────────────────────
+    const mentionPattern = /@(\w+)/g
+    const mentioned: string[] = []
+    let m: RegExpExecArray | null
+    while ((m = mentionPattern.exec(content)) !== null) {
+      const uname = m[1].toLowerCase()
+      if (!mentioned.includes(uname)) mentioned.push(uname)
+    }
+
+    if (mentioned.length > 0) {
+      const { data: mentionedUsers } = await db
+        .from("users")
+        .select("id, username")
+        .in("username", mentioned)
+
+      const toNotify = ((mentionedUsers ?? []) as { id: string; username: string }[]).filter(
+        (u) => u.id !== sender_id
+      )
+      if (toNotify.length > 0) {
+        await db.from("notifications").insert(
+          toNotify.map((u) => ({
+            user_id: u.id,
+            type: "mention",
+            title: "You were mentioned",
+            body: `${senderName} mentioned you in Public Chat`,
+            link: "/chat/public",
+            read: false,
+          }))
+        )
+      }
+    }
   }
 
   return NextResponse.json(data)

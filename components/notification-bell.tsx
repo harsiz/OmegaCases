@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react"
 import NextLink from "next/link"
-import { Bell, CheckCheck, ShoppingBag, ArrowLeftRight, Megaphone, CheckCircle, XCircle } from "lucide-react"
+import { Bell, CheckCheck, ShoppingBag, ArrowLeftRight, Megaphone, CheckCircle, XCircle, MessageSquare, AtSign } from "lucide-react"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
@@ -19,12 +19,14 @@ interface Notification {
 
 function TypeIcon({ type }: { type: string }) {
   switch (type) {
-    case "item_sold": return <ShoppingBag size={14} className="text-green-600" />
-    case "trade_received": return <ArrowLeftRight size={14} className="text-blue-600" />
-    case "trade_accepted": return <CheckCircle size={14} className="text-green-600" />
+    case "item_sold":      return <ShoppingBag   size={14} className="text-green-500" />
+    case "trade_received": return <ArrowLeftRight size={14} className="text-blue-500" />
+    case "trade_accepted": return <CheckCircle   size={14} className="text-green-500" />
     case "trade_declined":
-    case "trade_cancelled": return <XCircle size={14} className="text-red-600" />
-    default: return <Megaphone size={14} className="text-amber-600" />
+    case "trade_cancelled":return <XCircle       size={14} className="text-red-500" />
+    case "dm":             return <MessageSquare size={14} className="text-primary" />
+    case "mention":        return <AtSign        size={14} className="text-purple-400" />
+    default:               return <Megaphone     size={14} className="text-amber-500" />
   }
 }
 
