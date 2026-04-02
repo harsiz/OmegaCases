@@ -187,11 +187,38 @@ const STATUS_STYLES: Record<string, string> = {
   cancelled: "bg-muted text-muted-foreground",
 }
 
+function TradeCardSkeleton() {
+  return (
+    <div className="border border-border rounded-xl p-4 mb-3 animate-pulse">
+      <div className="flex justify-between items-center mb-3">
+        <div className="flex items-center gap-2">
+          <div className="w-8 h-8 rounded-full bg-muted" />
+          <div className="flex flex-col gap-1.5">
+            <div className="w-28 h-3 bg-muted rounded" />
+            <div className="w-16 h-2 bg-muted rounded" />
+          </div>
+        </div>
+        <div className="w-16 h-5 bg-muted rounded-full" />
+      </div>
+      <div className="grid grid-cols-[1fr_auto_1fr] gap-3 items-start">
+        <div className="flex gap-1.5">
+          {[0, 1, 2].map((i) => <div key={i} className="w-11 h-11 bg-muted rounded-lg" />)}
+        </div>
+        <div className="w-5 h-5 bg-muted rounded mt-3" />
+        <div className="flex gap-1.5">
+          {[0, 1].map((i) => <div key={i} className="w-11 h-11 bg-muted rounded-lg" />)}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function TradePage() {
   const { user, refreshUser } = useAuth()
   const [tab, setTab] = useState(0)
   const [trades, setTrades] = useState<{ sent: Trade[]; received: Trade[] }>({ sent: [], received: [] })
-  const [loading, setLoading] = useState(true)
+  const [loadingReceived, setLoadingReceived] = useState(true)
+  const [loadingSent, setLoadingSent] = useState(true)
   const [actionLoading, setActionLoading] = useState<string | null>(null)
   const [error, setError] = useState("")
   const [success, setSuccess] = useState("")
@@ -209,13 +236,23 @@ export default function TradePage() {
   const [createLoading, setCreateLoading] = useState(false)
   const [createError, setCreateError] = useState("")
 
-  const fetchTrades = useCallback(async () => {
+  const fetchTrades = useCallback(() => {
     if (!user) return
-    setLoading(true)
-    const res = await fetch(`/api/trades?user_id=${user.id}`)
-    const data = await res.json()
-    setTrades(data)
-    setLoading(false)
+    setLoadingReceived(true)
+    setLoadingSent(true)
+
+    // Fire both independently — each updates its own tab the moment it lands
+    fetch(`/api/trades?user_id=${user.id}&type=received`)
+      .then((r) => r.json())
+      .then((data) => setTrades((prev) => ({ ...prev, received: Array.isArray(data.received) ? data.received : [] })))
+      .catch(() => {})
+      .finally(() => setLoadingReceived(false))
+
+    fetch(`/api/trades?user_id=${user.id}&type=sent`)
+      .then((r) => r.json())
+      .then((data) => setTrades((prev) => ({ ...prev, sent: Array.isArray(data.sent) ? data.sent : [] })))
+      .catch(() => {})
+      .finally(() => setLoadingSent(false))
   }, [user])
 
   useEffect(() => { fetchTrades() }, [fetchTrades])
@@ -510,21 +547,19 @@ export default function TradePage() {
         ))}
       </div>
 
-      {loading ? (
-        <div className="flex justify-center py-16"><Loader2 size={32} className="animate-spin text-muted-foreground" /></div>
-      ) : (
-        <>
-          {tab === 0 && (
-            trades.received.length === 0
-              ? <p className="text-muted-foreground text-center py-10">No received trades yet.</p>
-              : trades.received.map((t) => <TradeCard key={t.id} trade={t} isSent={false} />)
-          )}
-          {tab === 1 && (
-            trades.sent.length === 0
-              ? <p className="text-muted-foreground text-center py-10">No sent trades yet.</p>
-              : trades.sent.map((t) => <TradeCard key={t.id} trade={t} isSent={true} />)
-          )}
-        </>
+      {tab === 0 && (
+        loadingReceived
+          ? <>{[0, 1, 2].map((i) => <TradeCardSkeleton key={i} />)}</>
+          : trades.received.length === 0
+            ? <p className="text-muted-foreground text-center py-10">No received trades yet.</p>
+            : trades.received.map((t) => <TradeCard key={t.id} trade={t} isSent={false} />)
+      )}
+      {tab === 1 && (
+        loadingSent
+          ? <>{[0, 1, 2].map((i) => <TradeCardSkeleton key={i} />)}</>
+          : trades.sent.length === 0
+            ? <p className="text-muted-foreground text-center py-10">No sent trades yet.</p>
+            : trades.sent.map((t) => <TradeCard key={t.id} trade={t} isSent={true} />)
       )}
 
       {/* New Trade Dialog */}

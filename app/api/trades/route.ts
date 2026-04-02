@@ -8,28 +8,35 @@ export async function GET(request: Request) {
   const userId = searchParams.get("user_id")
   if (!userId) return NextResponse.json({ error: "user_id required" }, { status: 400 })
 
+  // Optional ?type=sent|received — allows the client to fetch each side
+  // independently and in parallel instead of waiting for both.
+  const type = searchParams.get("type") // "sent" | "received" | null → both
+
   const supabase = await createClient()
 
-  const { data: sent } = await supabase
+  const sentQuery = supabase
     .from("trades")
-    .select(`
-      *,
-      receiver:users!trades_receiver_id_fkey(id, username, profile_picture, plus),
-      trade_items(id, side, inventory:inventory(id, item_id, items(id, name, image_url, rarity, rap)))
-    `)
+    .select(`*, receiver:users!trades_receiver_id_fkey(id, username, profile_picture, plus), trade_items(id, side, inventory:inventory(id, item_id, items(id, name, image_url, rarity, rap)))`)
     .eq("sender_id", userId)
     .order("created_at", { ascending: false })
 
-  const { data: received } = await supabase
+  const receivedQuery = supabase
     .from("trades")
-    .select(`
-      *,
-      sender:users!trades_sender_id_fkey(id, username, profile_picture, plus),
-      trade_items(id, side, inventory:inventory(id, item_id, items(id, name, image_url, rarity, rap)))
-    `)
+    .select(`*, sender:users!trades_sender_id_fkey(id, username, profile_picture, plus), trade_items(id, side, inventory:inventory(id, item_id, items(id, name, image_url, rarity, rap)))`)
     .eq("receiver_id", userId)
     .order("created_at", { ascending: false })
 
+  if (type === "sent") {
+    const { data } = await sentQuery
+    return NextResponse.json({ sent: data || [] })
+  }
+  if (type === "received") {
+    const { data } = await receivedQuery
+    return NextResponse.json({ received: data || [] })
+  }
+
+  // Both (legacy / fallback)
+  const [{ data: sent }, { data: received }] = await Promise.all([sentQuery, receivedQuery])
   return NextResponse.json({ sent: sent || [], received: received || [] })
 }
 

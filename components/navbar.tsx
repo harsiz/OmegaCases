@@ -269,7 +269,7 @@ export default function Navbar() {
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <div className="hidden sm:flex items-center gap-1.5 bg-green-500/10 border border-green-500/25 rounded-full px-2.5 py-1 shrink-0 cursor-default select-none">
+                  <div className="flex items-center gap-1.5 bg-green-500/10 border border-green-500/25 rounded-full px-2.5 py-1 shrink-0 cursor-default select-none">
                     <span className="relative flex h-2 w-2">
                       <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
                       <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500" />
@@ -424,12 +424,21 @@ export default function Navbar() {
                           {user.username[0].toUpperCase()}
                         </AvatarFallback>
                       </Avatar>
-                      <div className="min-w-0">
+                      <div className="min-w-0 flex-1">
                         <p className="text-sm font-bold truncate">{user.username}</p>
                         <button onClick={() => { setMobileOpen(false); setDepositOpen(true) }} className="text-xs text-primary font-semibold">
                           ${Number(user.balance).toFixed(2)}
                         </button>
                       </div>
+                      {onlineCount > 0 && (
+                        <div className="flex items-center gap-1 bg-green-500/10 border border-green-500/25 rounded-full px-2 py-0.5 shrink-0">
+                          <span className="relative flex h-1.5 w-1.5">
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
+                            <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-green-500" />
+                          </span>
+                          <span className="text-[0.6rem] font-bold text-green-400 tabular-nums">{onlineCount}</span>
+                        </div>
+                      )}
                     </div>
                   ) : (
                     <div className="flex gap-2">
