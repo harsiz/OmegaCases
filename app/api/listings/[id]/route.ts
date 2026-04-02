@@ -111,6 +111,45 @@ export async function POST(
   return NextResponse.json({ success: true })
 }
 
+// PATCH: Edit listing price (enforces 60s cooldown server-side)
+export async function PATCH(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const { id: listing_id } = await params
+  const { user_id, price } = await request.json()
+  const supabase = await createClient()
+
+  const { data: listing } = await supabase
+    .from("listings")
+    .select("seller_id, status, created_at, price")
+    .eq("id", listing_id)
+    .single()
+
+  if (!listing) return NextResponse.json({ error: "Listing not found" }, { status: 404 })
+  if (listing.seller_id !== user_id) return NextResponse.json({ error: "Not your listing" }, { status: 403 })
+  if (listing.status !== "active") return NextResponse.json({ error: "Listing is not active" }, { status: 400 })
+
+  const elapsed = Date.now() - new Date(listing.created_at).getTime()
+  if (elapsed < 60_000) {
+    const remaining = Math.ceil((60_000 - elapsed) / 1000)
+    return NextResponse.json({ error: `Cooldown active — ${remaining}s remaining`, cooldown: remaining }, { status: 429 })
+  }
+
+  if (!price || isNaN(Number(price)) || Number(price) <= 0) {
+    return NextResponse.json({ error: "Invalid price" }, { status: 400 })
+  }
+
+  const { error } = await supabase
+    .from("listings")
+    .update({ price: Number(price) })
+    .eq("id", listing_id)
+    .eq("seller_id", user_id)
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  return NextResponse.json({ success: true })
+}
+
 // DELETE: Cancel listing
 export async function DELETE(
   request: Request,

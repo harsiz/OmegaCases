@@ -18,6 +18,7 @@ import {
 import { useAuth } from "@/lib/auth-context"
 import { useThemeMode } from "./app-provider"
 import { useOnlineUsers } from "@/lib/use-online-users"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import DepositWithdrawModal from "./deposit-withdraw-modal"
 import NotificationBell from "./notification-bell"
 
@@ -207,7 +208,7 @@ export default function Navbar() {
   const [pendingTrades, setPendingTrades] = useState(0)
   const [mobileOpen, setMobileOpen] = useState(false)
   const [depositOpen, setDepositOpen] = useState(false)
-  const onlineCount = useOnlineUsers(user?.id)
+  const { count: onlineCount, users: onlineUsers } = useOnlineUsers(user?.id, user?.username)
 
   useEffect(() => { setMounted(true) }, [])
 
@@ -249,15 +250,37 @@ export default function Navbar() {
 
           {/* Online users pill — only shown when signed in */}
           {mounted && user && onlineCount > 0 && (
-            <div className="hidden sm:flex items-center gap-1.5 bg-green-500/10 border border-green-500/25 rounded-full px-2.5 py-1 shrink-0">
-              <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500" />
-              </span>
-              <span className="text-[0.65rem] font-bold text-green-400 tabular-nums">
-                {onlineCount.toLocaleString()} online
-              </span>
-            </div>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="hidden sm:flex items-center gap-1.5 bg-green-500/10 border border-green-500/25 rounded-full px-2.5 py-1 shrink-0 cursor-default select-none">
+                    <span className="relative flex h-2 w-2">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500" />
+                    </span>
+                    <span className="text-[0.65rem] font-bold text-green-400 tabular-nums">
+                      {onlineCount.toLocaleString()} online
+                    </span>
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="p-0 overflow-hidden min-w-[150px] bg-popover border-border/60">
+                  <div className="px-3 py-2.5">
+                    <p className="text-[0.6rem] font-bold text-muted-foreground uppercase tracking-wider mb-2">Online now</p>
+                    <div className="flex flex-col gap-1">
+                      {onlineUsers.slice(0, 7).map((u) => (
+                        <div key={u.userId} className="flex items-center gap-2">
+                          <span className="w-1.5 h-1.5 rounded-full bg-green-500 shrink-0" />
+                          <span className="text-xs font-medium text-foreground">{u.username}</span>
+                        </div>
+                      ))}
+                    </div>
+                    {onlineUsers.length > 7 && (
+                      <p className="text-[0.65rem] text-muted-foreground mt-1.5">+{onlineUsers.length - 7} more</p>
+                    )}
+                  </div>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
           )}
 
           {/* Desktop nav */}

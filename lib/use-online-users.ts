@@ -3,17 +3,24 @@
 import { useEffect, useState } from "react"
 import { createClient } from "@/lib/supabase/client"
 
-/**
- * Tracks how many authenticated users are currently online using
- * Supabase Realtime Presence. Each signed-in browser tab joins the
- * shared "online-users" channel and tracks itself. The count is the
- * number of unique user keys present at any given moment.
- */
-export function useOnlineUsers(userId?: string | null) {
+interface OnlineUser {
+  userId: string
+  username: string
+}
+
+interface OnlineUsersResult {
+  count: number
+  users: OnlineUser[]
+}
+
+export function useOnlineUsers(
+  userId?: string | null,
+  username?: string | null
+): OnlineUsersResult {
   const [count, setCount] = useState(0)
+  const [users, setUsers] = useState<OnlineUser[]>([])
 
   useEffect(() => {
-    // Only track if the viewer is signed in
     if (!userId) return
 
     const supabase = createClient()
@@ -23,19 +30,33 @@ export function useOnlineUsers(userId?: string | null) {
 
     channel
       .on("presence", { event: "sync" }, () => {
-        const state = channel.presenceState()
-        setCount(Object.keys(state).length)
+        const state = channel.presenceState<{ user_id: string; username: string }>()
+        const keys = Object.keys(state)
+        setCount(keys.length)
+        // Each key maps to an array of presence entries (multiple tabs); take first
+        const list: OnlineUser[] = keys.map((key) => {
+          const entry = (state[key] as any[])[0] ?? {}
+          return {
+            userId: entry.user_id ?? key,
+            username: entry.username ?? key.slice(0, 8),
+          }
+        })
+        setUsers(list)
       })
       .subscribe(async (status) => {
         if (status === "SUBSCRIBED") {
-          await channel.track({ user_id: userId, online_at: new Date().toISOString() })
+          await channel.track({
+            user_id: userId,
+            username: username ?? userId.slice(0, 8),
+            online_at: new Date().toISOString(),
+          })
         }
       })
 
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [userId])
+  }, [userId, username])
 
-  return count
+  return { count, users }
 }

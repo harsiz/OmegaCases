@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from "react"
 import NextLink from "next/link"
-import { Filter, Plus, ArrowLeft, Clock, Loader2 } from "lucide-react"
+import { Filter, Plus, ArrowLeft, Clock, Loader2, LayoutList, Pencil, Trash2, Timer } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
@@ -77,6 +77,75 @@ export default function MarketplacePage() {
   useEffect(() => {
     saveFilters({ search, rarities, minPrice, maxPrice, sellerSearch, sortBy, ignoreOwn, showSold })
   }, [search, rarities, minPrice, maxPrice, sellerSearch, sortBy, ignoreOwn, showSold])
+
+  // My Listings dialog
+  const [myListingsOpen, setMyListingsOpen] = useState(false)
+  const [myListings, setMyListings] = useState<Listing[]>([])
+  const [myListingsLoading, setMyListingsLoading] = useState(false)
+  const [editListingId, setEditListingId] = useState<string | null>(null)
+  const [editPrice, setEditPrice] = useState("")
+  const [editLoading, setEditLoading] = useState(false)
+  const [editError, setEditError] = useState("")
+  const [revokeLoading, setRevokeLoading] = useState<string | null>(null)
+
+  // Tick every second when my-listings dialog is open (for live cooldown countdown)
+  useEffect(() => {
+    if (!myListingsOpen) return
+    const id = setInterval(() => setMyListings((prev) => [...prev]), 1000)
+    return () => clearInterval(id)
+  }, [myListingsOpen])
+
+  const fetchMyListings = async () => {
+    if (!user) return
+    setMyListingsLoading(true)
+    try {
+      const res = await fetch(`/api/listings?sellerSearch=${encodeURIComponent(user.username)}&page=0`)
+      const data = await res.json()
+      const all: Listing[] = Array.isArray(data.listings) ? data.listings : Array.isArray(data) ? data : []
+      setMyListings(all.filter((l) => l.seller_id === user.id && l.status === "active"))
+    } finally {
+      setMyListingsLoading(false)
+    }
+  }
+
+  const handleEditPrice = async (listingId: string) => {
+    if (!user) return
+    setEditLoading(true)
+    setEditError("")
+    try {
+      const res = await fetch(`/api/listings/${listingId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ user_id: user.id, price: parseFloat(editPrice) }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error)
+      setEditListingId(null)
+      setEditPrice("")
+      await fetchMyListings()
+      fetchListings(0, true)
+    } catch (e: any) {
+      setEditError(e.message)
+    } finally {
+      setEditLoading(false)
+    }
+  }
+
+  const handleRevoke = async (listingId: string) => {
+    if (!user) return
+    setRevokeLoading(listingId)
+    try {
+      await fetch(`/api/listings/${listingId}`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ user_id: user.id }),
+      })
+      await fetchMyListings()
+      fetchListings(0, true)
+    } finally {
+      setRevokeLoading(null)
+    }
+  }
 
   // Sell dialog
   const [sellOpen, setSellOpen] = useState(false)
@@ -276,9 +345,14 @@ export default function MarketplacePage() {
             <Filter size={15} /> Filter
           </Button>
           {user && (
-            <Button className="gap-2" onClick={openSellDialog}>
-              <Plus size={15} /> List Item
-            </Button>
+            <>
+              <Button variant="outline" className="gap-2" onClick={() => { fetchMyListings(); setMyListingsOpen(true) }}>
+                <LayoutList size={15} /> My Listings
+              </Button>
+              <Button className="gap-2" onClick={openSellDialog}>
+                <Plus size={15} /> List Item
+              </Button>
+            </>
           )}
         </div>
       </div>
@@ -370,6 +444,138 @@ export default function MarketplacePage() {
           {hydrated && <FilterPanel {...filterProps} />}
         </SheetContent>
       </Sheet>
+
+      {/* My Listings dialog */}
+      <Dialog open={myListingsOpen} onOpenChange={(v) => { if (!v) { setMyListingsOpen(false); setEditListingId(null); setEditError("") } }}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <LayoutList size={16} /> My Active Listings
+            </DialogTitle>
+          </DialogHeader>
+          <div className="py-1 max-h-[420px] overflow-y-auto pr-1">
+            {myListingsLoading ? (
+              <div className="flex justify-center py-10">
+                <Loader2 size={24} className="animate-spin text-muted-foreground" />
+              </div>
+            ) : myListings.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-6 text-center">No active listings.</p>
+            ) : (
+              <div className="flex flex-col divide-y divide-border">
+                {myListings.map((listing) => {
+                  const item = listing.items
+                  if (!item) return null
+                  const elapsed = Date.now() - new Date(listing.created_at).getTime()
+                  const inCooldown = elapsed < 60_000
+                  const remaining = inCooldown ? Math.ceil((60_000 - elapsed) / 1000) : 0
+                  const color = RARITY_COLORS[item.rarity as Rarity]
+                  const isEditing = editListingId === listing.id
+                  return (
+                    <div key={listing.id} className="py-3 flex items-center gap-3">
+                      <img
+                        src={item.image_url}
+                        alt={item.name}
+                        className="w-12 h-12 object-contain rounded-lg border shrink-0"
+                        style={{ borderColor: `${color}44`, backgroundColor: "#0d0f12" }}
+                      />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold truncate">{item.name}</p>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-sm font-bold text-primary">${Number(listing.price).toFixed(2)}</span>
+                          {inCooldown && (
+                            <span className="flex items-center gap-1 text-[0.65rem] font-bold text-amber-400">
+                              <Timer size={10} /> {remaining}s
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      {isEditing ? (
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <Input
+                            type="number"
+                            value={editPrice}
+                            onChange={(e) => setEditPrice(e.target.value)}
+                            className="w-20 h-7 text-xs"
+                            min={0.01}
+                            step={0.01}
+                            autoFocus
+                            onKeyDown={(e) => { if (e.key === "Enter") handleEditPrice(listing.id); if (e.key === "Escape") { setEditListingId(null); setEditPrice(""); setEditError("") } }}
+                          />
+                          <Button
+                            size="sm"
+                            className="h-7 px-2 text-xs"
+                            onClick={() => handleEditPrice(listing.id)}
+                            disabled={editLoading || !editPrice}
+                          >
+                            {editLoading ? <Loader2 size={11} className="animate-spin" /> : "Save"}
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-7 px-2 text-xs"
+                            onClick={() => { setEditListingId(null); setEditPrice(""); setEditError("") }}
+                          >
+                            ✕
+                          </Button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-7 w-7 p-0"
+                                  disabled={inCooldown}
+                                  onClick={() => { setEditListingId(listing.id); setEditPrice(String(listing.price)); setEditError("") }}
+                                >
+                                  <Pencil size={12} />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                {inCooldown ? `Edit locked — ${remaining}s remaining` : "Edit price"}
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-7 w-7 p-0 text-destructive hover:text-destructive hover:bg-destructive/10 border-destructive/30"
+                                  disabled={inCooldown || revokeLoading === listing.id}
+                                  onClick={() => handleRevoke(listing.id)}
+                                >
+                                  {revokeLoading === listing.id
+                                    ? <Loader2 size={12} className="animate-spin" />
+                                    : <Trash2 size={12} />}
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                {inCooldown ? `Remove locked — ${remaining}s remaining` : "Remove listing"}
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+            {editError && (
+              <Alert variant="destructive" className="mt-3">
+                <AlertDescription>{editError}</AlertDescription>
+              </Alert>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setMyListingsOpen(false)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Sell dialog — two-step */}
       <Dialog open={sellOpen} onOpenChange={(v) => !v && setSellOpen(false)}>
