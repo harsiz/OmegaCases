@@ -608,7 +608,9 @@ export default function MarketplacePage() {
               <p className="text-sm text-muted-foreground py-2">No items available to list.</p>
             ) : !selectedItemId ? (
               // Step 1: unique items
-              <div className="flex flex-col divide-y divide-border">
+              <>
+                <p className="text-xs text-muted-foreground mb-2">{groupedInventory.length} item{groupedInventory.length !== 1 ? "s" : ""} available</p>
+                <div className="flex flex-col divide-y divide-border max-h-[340px] overflow-y-auto -mx-1 px-1 pr-2">
                 {groupedInventory.map((group) => {
                   const color = RARITY_COLORS[group.rarity as Rarity]
                   return (
@@ -636,14 +638,15 @@ export default function MarketplacePage() {
                     </button>
                   )
                 })}
-              </div>
+                </div>
+              </>
             ) : (
               // Step 2: copies + price
               <div className="flex flex-col gap-3">
                 {selectedGroup && selectedGroup.copies.length > 1 && (
                   <>
                     <p className="text-sm text-muted-foreground">You own <strong>{selectedGroup.copies.length}</strong> copies. Select which to list:</p>
-                    <div className="flex flex-col divide-y divide-border">
+                    <div className="flex flex-col divide-y divide-border max-h-[220px] overflow-y-auto">
                       {selectedGroup.copies.map((inv, idx) => {
                         const checked = selectedCopies.some((c) => c.id === inv.id)
                         return (
