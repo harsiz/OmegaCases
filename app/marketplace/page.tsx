@@ -824,6 +824,34 @@ export default function MarketplacePage() {
                         min={0.01} max={cap} step={0.01}
                         autoFocus
                       />
+                      {(() => {
+                        const rap = Number(item.items?.rap ?? 0)
+                        if (!rap) return null
+                        const quickSell = Math.max(0.01, parseFloat((rap * 0.70).toFixed(2)))
+                        const quickProfit = Math.min(cap, parseFloat((rap * 1.30).toFixed(2)))
+                        return (
+                          <div className="flex gap-2">
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              className="flex-1 h-7 text-xs border-green-500/30 text-green-400 hover:bg-green-500/10 hover:text-green-300"
+                              onClick={() => setSellPrice(String(quickSell))}
+                            >
+                              Quick Sell — ${quickSell.toFixed(2)}
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              className="flex-1 h-7 text-xs border-primary/30 text-primary hover:bg-primary/10"
+                              onClick={() => setSellPrice(String(quickProfit))}
+                            >
+                              Quick Profit — ${quickProfit.toFixed(2)}
+                            </Button>
+                          </div>
+                        )
+                      })()}
                     </div>
                   )
                 })()}
