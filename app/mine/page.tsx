@@ -375,7 +375,7 @@ export default function MinePage() {
                         <CopyButton text={user.id} />
                       </div>
                       <p className="text-[0.65rem] text-muted-foreground">
-                        Your ID is pre-configured in the miner. Each valid block you find credits <span className="text-green-400 font-semibold">${Number(info?.reward ?? 0.64).toFixed(4)}</span> to your balance.
+                        Your ID is pre-configured in the miner. Each valid block you find credits <span className="text-green-400 font-semibold">${Number(info?.reward ?? 0.32).toFixed(4)}</span> to your balance.
                       </p>
                     </>
                   ) : (
@@ -384,15 +384,17 @@ export default function MinePage() {
                     </p>
                   )}
 
-                  <Button className="gap-2 w-full" disabled>
-                    <Download size={14} /> Download Miner — Coming Soon
+                  <Button className="gap-2 w-full" asChild>
+                    <a href="https://github.com/harsiz/OC-Miner/" target="_blank" rel="noopener noreferrer">
+                      <Download size={14} /> Download Miner
+                    </a>
                   </Button>
 
                   <div className="text-[0.62rem] text-muted-foreground space-y-1">
                     <p>• Hash function: <span className="font-mono text-foreground">SHA256(prev_hash + user_id + nonce)</span></p>
                     <p>• Target block time: <span className="font-semibold text-foreground">6 minutes</span></p>
                     <p>• Difficulty adjusts every <span className="font-semibold text-foreground">32 blocks</span></p>
-                    <p>• Reward halves every <span className="font-semibold text-foreground">1,024 blocks</span></p>
+                    <p>• Reward halves every <span className="font-semibold text-foreground">256 blocks</span></p>
                   </div>
                 </div>
               )}
