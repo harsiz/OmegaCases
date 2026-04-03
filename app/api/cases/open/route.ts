@@ -1,18 +1,43 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
+import { createHmac, randomBytes, createHash } from "crypto"
 
-function rollItem(items: { id: string; likelihood: number }[]) {
+/** Generate a random server seed */
+function newServerSeed(): string {
+  return randomBytes(32).toString("hex")
+}
+
+/** SHA-256 commitment hash shown to player before the spin */
+function commitHash(serverSeed: string): string {
+  return createHash("sha256").update(serverSeed).digest("hex")
+}
+
+/** Provably fair float in [0,1) — same algorithm as lib/arcade-fair.ts */
+function fairFloat(serverSeed: string, clientSeed: string, nonce: number): number {
+  const hmac = createHmac("sha256", serverSeed)
+  hmac.update(`${clientSeed}:${nonce}:0`)
+  const hex = hmac.digest("hex")
+  return parseInt(hex.slice(0, 8), 16) / 0x100000000
+}
+
+/** Map a [0,1) float to an item using weighted likelihoods */
+function rollItemFair(
+  items: { id: string; likelihood: number }[],
+  float: number,
+): string {
   const total = items.reduce((sum, i) => sum + Number(i.likelihood), 0)
-  let rand = Math.random() * total
+  let threshold = float * total
   for (const item of items) {
-    rand -= Number(item.likelihood)
-    if (rand <= 0) return item.id
+    threshold -= Number(item.likelihood)
+    if (threshold <= 0) return item.id
   }
   return items[items.length - 1].id
 }
 
 export async function POST(request: Request) {
-  const { user_id } = await request.json()
+  const body = await request.json()
+  const { user_id, client_seed } = body
+  const clientSeed: string = (client_seed as string)?.trim() || "omegacases"
 
   if (!user_id) {
     return NextResponse.json({ error: "Missing user_id" }, { status: 400 })
@@ -39,9 +64,14 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "No items available" }, { status: 500 })
   }
 
-  const wonItemId = rollItem(items)
+  // ── Provably fair roll ────────────────────────────────────────────────────
+  const serverSeed = newServerSeed()
+  const serverSeedHash = commitHash(serverSeed)
+  const nonce = 0
+  const float = fairFloat(serverSeed, clientSeed, nonce)
+  const wonItemId = rollItemFair(items, float)
+  // ─────────────────────────────────────────────────────────────────────────
 
-  // Decrement cases_remaining, increment total cases opened
   const { error: updateError } = await supabase
     .from("users")
     .update({
@@ -52,25 +82,21 @@ export async function POST(request: Request) {
 
   if (updateError) return NextResponse.json({ error: updateError.message }, { status: 500 })
 
-  // Add to inventory
   const { error: invError } = await supabase
     .from("inventory")
     .insert({ user_id, item_id: wonItemId })
 
   if (invError) return NextResponse.json({ error: invError.message }, { status: 500 })
 
-  // NOTE: rolls table insert is intentionally NOT done here.
-  // It is done client-side AFTER the spin animation ends, so the live feed
-  // never reveals the result before the roller sees it.
+  // NOTE: rolls table insert is done client-side AFTER spin animation ends
+  // so the live feed never reveals the result before the player sees it.
 
-  // Set first_unboxed_by if this item has never been unboxed before
   await supabase
     .from("items")
     .update({ first_unboxed_by: user_id })
     .eq("id", wonItemId)
     .is("first_unboxed_by", null)
 
-  // Return won item details
   const { data: wonItem } = await supabase
     .from("items")
     .select("*")
@@ -80,5 +106,12 @@ export async function POST(request: Request) {
   return NextResponse.json({
     wonItem,
     cases_remaining: user.cases_remaining - 1,
+    // Provably fair fields — server_seed_hash shown during spin,
+    // server_seed revealed in the result so the player can verify
+    server_seed_hash: serverSeedHash,
+    server_seed: serverSeed,
+    client_seed: clientSeed,
+    nonce,
+    float,  // the raw roll value, for full transparency
   })
 }

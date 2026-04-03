@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react"
 import NextLink from "next/link"
-import { Lock, Package, ShoppingCart, Zap, Loader2, Crown } from "lucide-react"
+import { Lock, Package, ShoppingCart, Zap, Loader2, Crown, ShieldCheck, ExternalLink } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
@@ -39,6 +39,12 @@ export default function OpenPage() {
   const [wonItemId, setWonItemId] = useState<string | null>(null)
   const [showResult, setShowResult] = useState(false)
   const [lastWon, setLastWon] = useState<Item | null>(null)
+  const [lastRollId, setLastRollId] = useState<string | null>(null)
+  // Provably fair state
+  const [fairData, setFairData] = useState<{
+    server_seed: string; server_seed_hash: string
+    client_seed: string; nonce: number; float: number
+  } | null>(null)
   const [confettiActive, setConfettiActive] = useState(false)
   const [spinLoading, setSpinLoading] = useState(false)
   const [buyLoading, setBuyLoading] = useState(false)
@@ -111,6 +117,13 @@ export default function OpenPage() {
       if (!res.ok) throw new Error(data.error || "Failed to open case")
       setTargetItem(data.wonItem)
       setWonItemId(data.wonItem.id)
+      setFairData({
+        server_seed:      data.server_seed,
+        server_seed_hash: data.server_seed_hash,
+        client_seed:      data.client_seed,
+        nonce:            data.nonce,
+        float:            data.float,
+      })
       await refreshUser()
       setSpinning(true)
     } catch (e: any) {
@@ -129,7 +142,17 @@ export default function OpenPage() {
       fetch("/api/rolls/record", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ user_id: user.id, item_id: wonItemId }),
+        body: JSON.stringify({
+          user_id: user.id,
+          item_id: wonItemId,
+          server_seed:      fairData?.server_seed,
+          server_seed_hash: fairData?.server_seed_hash,
+          client_seed:      fairData?.client_seed,
+          nonce:            fairData?.nonce,
+          float:            fairData?.float,
+        }),
+      }).then(r => r.json()).then(d => {
+        if (d.id) setLastRollId(d.id)
       }).catch(() => {})
     }
     if (CONFETTI_RARITIES.includes(targetItem.rarity as Rarity)) {
@@ -197,6 +220,15 @@ export default function OpenPage() {
                 speed={doubleSpeed ? (user?.plus ? 3 : 2) : 1}
                 muted={muted}
               />
+              {/* Show commitment hash DURING spin — seed hidden until result */}
+              {spinning && fairData && (
+                <div className="flex items-center justify-center gap-1.5 mt-3 text-xs text-muted-foreground">
+                  <ShieldCheck size={12} className="text-green-400 shrink-0" />
+                  <span className="text-green-400 font-semibold mr-1">Provably Fair</span>
+                  Server seed hash:
+                  <span className="font-mono text-[0.65rem] truncate max-w-[220px]">{fairData.server_seed_hash}</span>
+                </div>
+              )}
             </div>
           )}
 
@@ -229,6 +261,27 @@ export default function OpenPage() {
                     : "No cases left"}
                 </Button>
               </div>
+              {/* Reveal server seed after spin */}
+              {fairData && (
+                <div className="mt-4 pt-4 border-t border-border/40 text-left">
+                  <div className="flex items-center gap-1.5 text-xs text-green-400 font-semibold mb-2">
+                    <ShieldCheck size={12} /> Provably Fair — Verify this spin
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-[0.65rem] font-mono text-muted-foreground break-all">
+                    <div><span className="text-foreground font-semibold block mb-0.5">Server Seed</span>{fairData.server_seed}</div>
+                    <div><span className="text-foreground font-semibold block mb-0.5">Client Seed</span>{fairData.client_seed}</div>
+                  </div>
+                  <div className="text-[0.65rem] text-muted-foreground mt-1.5">
+                    Roll: <span className="font-mono text-foreground">{fairData.float?.toFixed(10)}</span>
+                    {lastRollId && (
+                      <a href={`/api/rolls/verify?id=${lastRollId}`} target="_blank" rel="noopener noreferrer"
+                        className="ml-3 inline-flex items-center gap-1 text-primary hover:underline">
+                        <ExternalLink size={10} /> Full Verification
+                      </a>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
