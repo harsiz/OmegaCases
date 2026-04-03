@@ -152,7 +152,15 @@ export async function POST(req: Request) {
   const expectedHash = createHash("sha256").update(preimage).digest("hex")
 
   if (expectedHash !== hash.toLowerCase()) {
-    return NextResponse.json({ error: "Hash verification failed" }, { status: 400 })
+    return NextResponse.json({
+      error: "Hash verification failed",
+      debug: {
+        preimage,
+        server_hash: expectedHash,
+        submitted_hash: hash.toLowerCase(),
+        note: "preimage = prev_hash + miner_id + nonce (no separators, nonce as plain integer string)",
+      },
+    }, { status: 400 })
   }
 
   // Check hash < target
