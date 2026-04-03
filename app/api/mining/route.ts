@@ -15,15 +15,22 @@ const DEFAULT_TARGET = "00000fffffffffffffffffffffffffffffffffffffffffffffffffff
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
+/** Normalize any hex target to exactly 64 chars.
+ *  Short strings are right-padded with 'f' (preserves difficulty intent).
+ *  Long strings are truncated on the right. */
+function normalizeTarget(hex: string): string {
+  const cleaned = (hex ?? "").toLowerCase().replace(/[^0-9a-f]/g, "")
+  return cleaned.padEnd(64, "f").slice(0, 64)
+}
+
 /** Parse a 64-char hex target into a BigInt */
 function targetToBigInt(hex: string): bigint {
-  return BigInt("0x" + hex.padStart(64, "0"))
+  return BigInt("0x" + normalizeTarget(hex))
 }
 
 /** Encode a BigInt back to a zero-padded 64-char hex string */
 function bigIntToTarget(n: bigint): string {
-  const h = n.toString(16)
-  return h.padStart(64, "0").slice(0, 64)
+  return n.toString(16).padStart(64, "0").slice(0, 64)
 }
 
 /** Clamp a value to [min, max] */
@@ -61,7 +68,7 @@ export async function GET() {
     getSetting(db, "mining_last_adj_height"),
   ])
 
-  const currentTarget = targetRaw ?? DEFAULT_TARGET
+  const currentTarget = normalizeTarget(targetRaw ?? DEFAULT_TARGET)
   const currentHeight = parseInt(heightRaw ?? "0", 10)
   const lastAdjHeight = parseInt(lastAdjHeightRaw ?? "0", 10)
   const currentReward = rewardAtHeight(currentHeight)
@@ -132,7 +139,7 @@ export async function POST(req: Request) {
     getSetting(db, "mining_last_adj_height"),
   ])
 
-  const currentTarget = targetRaw ?? DEFAULT_TARGET
+  const currentTarget = normalizeTarget(targetRaw ?? DEFAULT_TARGET)
   const currentHeight = parseInt(heightRaw ?? "0", 10)
   const lastAdjHeight = parseInt(lastAdjHeightRaw ?? "0", 10)
 
