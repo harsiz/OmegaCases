@@ -148,7 +148,9 @@ export async function POST(req: Request) {
   }
 
   // ── Verify the hash ──
-  const preimage = `${previousHash}${miner_id}${nonce}`
+  // Preimage: prev_hash + miner_id (no dashes) + nonce as plain integer string
+  const minerIdNoDashes = miner_id.replace(/-/g, "")
+  const preimage = `${previousHash}${minerIdNoDashes}${nonce}`
   const expectedHash = createHash("sha256").update(preimage).digest("hex")
 
   if (expectedHash !== hash.toLowerCase()) {
@@ -158,7 +160,7 @@ export async function POST(req: Request) {
         preimage,
         server_hash: expectedHash,
         submitted_hash: hash.toLowerCase(),
-        note: "preimage = prev_hash + miner_id + nonce (no separators, nonce as plain integer string)",
+        note: "preimage = prev_hash + miner_id_no_dashes + nonce (plain integer string, no separators)",
       },
     }, { status: 400 })
   }

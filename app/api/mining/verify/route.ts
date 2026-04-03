@@ -17,12 +17,14 @@ export async function GET(req: Request) {
     }, { status: 400 })
   }
 
-  const preimage = `${prev_hash}${miner_id}${nonce}`
+  const minerIdNoDashes = miner_id.replace(/-/g, "")
+  const preimage = `${prev_hash}${minerIdNoDashes}${nonce}`
   const hash = createHash("sha256").update(preimage).digest("hex")
 
   return NextResponse.json({
     preimage,
     preimage_length: preimage.length,
     hash,
+    note: "miner_id dashes are stripped before hashing",
   })
 }
