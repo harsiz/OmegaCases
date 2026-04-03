@@ -12,7 +12,7 @@ const ALL_SCOPES = [
   { id: "read_id",       label: "Read User ID" },
   { id: "read_username", label: "Read Username" },
   { id: "read_balance",  label: "Read Balance" },
-  { id: "write_balance", label: "Write Balance" },
+  { id: "spend_balance", label: "Spend On Your Behalf" },
   { id: "write_cases",   label: "Open Cases on Behalf" },
 ]
 

@@ -155,19 +155,60 @@ const state    = params.get("state")  // verify matches what you sent`}
           <div className="px-4 py-4">
             <div className="grid gap-2 text-sm">
               {[
-                ["read_id",       "User's UUID"],
-                ["read_username", "User's username"],
-                ["read_balance",  "User's balance (number)"],
-                ["write_balance", "Modify user's balance"],
+                ["read_id",       "User's UUID — returned in callback redirect"],
+                ["read_username", "User's username — returned in callback redirect"],
+                ["read_balance",  "User's balance — returned in callback redirect"],
+                ["spend_balance", "Spend user's balance via /api/oauth/spend (deduct only)"],
                 ["write_cases",   "Open cases on behalf of user"],
               ].map(([scope, desc]) => (
-                <div key={scope} className="flex items-center gap-3">
-                  <code className="text-xs bg-primary/10 text-primary border border-primary/20 px-2 py-0.5 rounded font-mono w-36 shrink-0">
+                <div key={scope} className="flex items-start gap-3">
+                  <code className="text-xs bg-primary/10 text-primary border border-primary/20 px-2 py-0.5 rounded font-mono w-36 shrink-0 mt-0.5">
                     {scope}
                   </code>
                   <span className="text-muted-foreground text-xs">{desc}</span>
                 </div>
               ))}
+            </div>
+          </div>
+        </div>
+
+        {/* spend_balance deep-dive */}
+        <div className="border border-border rounded-xl overflow-hidden">
+          <div className="px-4 py-3 bg-muted flex items-center justify-between">
+            <span className="font-semibold text-sm">Using spend_balance</span>
+            <span className="text-xs text-muted-foreground bg-background border border-border px-2 py-0.5 rounded">Requires client_secret</span>
+          </div>
+          <div className="px-4 py-4 flex flex-col gap-4">
+            <p className="text-sm text-muted-foreground">
+              After the user authorizes your app with <code className="bg-muted px-1 rounded text-xs">spend_balance</code>, you can deduct from their balance server-side.
+              Amounts must be positive — you can only <strong>spend</strong>, never add. The user receives an in-app notification every time balance is deducted.
+            </p>
+
+            <div>
+              <p className="text-xs font-bold text-muted-foreground uppercase tracking-wide mb-2">Request</p>
+              <pre className="bg-slate-900 rounded-lg p-3 text-blue-300 font-mono text-xs whitespace-pre-wrap">
+{`POST ${BASE}/api/oauth/spend
+Content-Type: application/json
+
+{
+  "client_id":     "your_client_id",
+  "client_secret": "your_client_secret",
+  "user_id":       "uuid-of-authorized-user",
+  "amount":        2.50
+}`}
+              </pre>
+            </div>
+
+            <div>
+              <p className="text-xs font-bold text-muted-foreground uppercase tracking-wide mb-2">Response</p>
+              <pre className="bg-slate-900 rounded-lg p-3 text-green-300 font-mono text-xs whitespace-pre-wrap">
+{`{ "ok": true, "spent": 2.50, "new_balance": 47.50 }`}
+              </pre>
+            </div>
+
+            <div className="bg-amber-500/10 border border-amber-500/25 rounded-lg px-3 py-2.5 text-xs text-amber-600 dark:text-amber-400">
+              <strong>Note:</strong> Never expose your <code className="bg-amber-500/10 px-1 rounded">client_secret</code> in client-side code.
+              Only call <code className="bg-amber-500/10 px-1 rounded">/api/oauth/spend</code> from your server.
             </div>
           </div>
         </div>

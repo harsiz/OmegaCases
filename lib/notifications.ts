@@ -7,6 +7,7 @@ export type NotificationType =
   | "trade_declined"
   | "trade_cancelled"
   | "announcement"
+  | "oauth_spend"
 
 export async function createNotification({
   user_id,

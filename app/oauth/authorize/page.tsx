@@ -10,7 +10,7 @@ const SCOPE_LABELS: Record<string, string> = {
   read_id:       "Read your User ID",
   read_username: "Read your username",
   read_balance:  "Read your balance",
-  write_balance: "Modify your balance",
+  spend_balance: "Spend balance on your behalf",
   write_cases:   "Open cases on your behalf",
 }
 
