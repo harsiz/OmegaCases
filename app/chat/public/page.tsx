@@ -39,7 +39,8 @@ function MessageContent({
   content: string
   myUsername?: string
 }) {
-  const parts = content.split(/(https?:\/\/[^\s<>"{}|\\^`[\]]+|@\w+)/)
+  // Split on URLs and @mentions — @mention allows spaces to handle "John Doe" style usernames
+  const parts = content.split(/(https?:\/\/[^\s<>"{}|\\^`[\]]+|@\w+(?:\s\w+)*)/)
   return (
     <p className="text-sm text-foreground/90 leading-relaxed break-words">
       {parts.map((part, i) => {
@@ -56,7 +57,7 @@ function MessageContent({
             </a>
           )
         }
-        if (/^@\w+$/.test(part)) {
+        if (/^@\w+/.test(part)) {
           const isMine = myUsername && part.toLowerCase() === `@${myUsername.toLowerCase()}`
           return (
             <span

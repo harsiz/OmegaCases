@@ -145,12 +145,14 @@ function MessageBubble({ msg, isOwn }: { msg: Message; isOwn: boolean }) {
               : "bg-muted text-foreground rounded-bl-sm"
           }`}
         >
-          {msg.content.split(/(https?:\/\/[^\s<>"{}|\\^`[\]]+)/).map((part, i) =>
+          {msg.content.split(/(https?:\/\/[^\s<>"{}|\\^`[\]]+|@\w+(?:\s\w+)*)/).map((part, i) =>
             /^https?:\/\//.test(part) ? (
               <a key={i} href={part} target="_blank" rel="noopener noreferrer"
                 className="underline underline-offset-2 opacity-90 hover:opacity-100 break-all">
                 {part}
               </a>
+            ) : /^@\w+/.test(part) ? (
+              <span key={i} className="text-primary font-semibold">{part}</span>
             ) : part
           )}
         </div>
