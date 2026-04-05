@@ -9,6 +9,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { useAuth } from "@/lib/auth-context"
 import { createClient } from "@/lib/supabase/client"
 import { RARITY_COLORS } from "@/lib/types"
+import BattleSpinner, { type SpinItem } from "@/components/battle-spinner"
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -66,31 +67,29 @@ function buildRounds(rolls: BattleRoll[], creatorId: string) {
     .sort((a, b) => a.round - b.round)
 }
 
-function runningRap(rolls: BattleRoll[], userId: string, upToRound: number) {
-  return rolls
-    .filter((r) => r.user_id === userId && r.round <= upToRound)
-    .reduce((sum, r) => sum + Number(r.rap), 0)
-}
+// ── Static item card (post-reveal) ─────────────────────────────────────────────
 
-// ── Item card ──────────────────────────────────────────────────────────────────
-
-function ItemCard({ roll, revealed }: { roll?: BattleRoll; revealed: boolean }) {
-  if (!revealed || !roll) {
-    return (
-      <div className="w-full aspect-square max-w-[130px] mx-auto rounded-xl bg-muted/40 border border-border/40 flex items-center justify-center">
-        <div className="w-10 h-10 rounded-full bg-muted/60 animate-pulse" />
-      </div>
-    )
-  }
+function RevealedCard({ roll }: { roll: BattleRoll }) {
   const color = (RARITY_COLORS as Record<string, string>)[roll.items.rarity] ?? "#9e9e9e"
   return (
     <div
-      className="w-full max-w-[130px] mx-auto rounded-xl border p-2.5 flex flex-col items-center gap-1.5 animate-in fade-in zoom-in-95 duration-300"
-      style={{ borderColor: color + "60", background: color + "10" }}
+      className="w-full mx-auto rounded-xl border p-2.5 flex flex-col items-center gap-1.5 animate-in fade-in zoom-in-95 duration-300"
+      style={{ borderColor: color + "60", background: color + "10", maxWidth: 270 }}
     >
-      <img src={roll.items.image_url} alt={roll.items.name} className="w-16 h-16 object-contain" />
-      <p className="text-[0.65rem] font-semibold text-center leading-tight line-clamp-2">{roll.items.name}</p>
+      <img src={roll.items.image_url} alt={roll.items.name} className="w-14 h-14 object-contain" />
+      <p className="text-[0.62rem] font-semibold text-center leading-tight line-clamp-2">{roll.items.name}</p>
       <p className="text-xs font-bold" style={{ color }}>${Number(roll.rap).toFixed(2)}</p>
+    </div>
+  )
+}
+
+function PlaceholderCard() {
+  return (
+    <div
+      className="w-full mx-auto rounded-xl bg-muted/30 border border-border/30 flex items-center justify-center"
+      style={{ maxWidth: 270, height: 112 }}
+    >
+      <div className="w-8 h-8 rounded-full bg-muted/60" />
     </div>
   )
 }
@@ -100,13 +99,23 @@ function ItemCard({ roll, revealed }: { roll?: BattleRoll; revealed: boolean }) 
 export default function BattleRoomPage() {
   const { id } = useParams<{ id: string }>()
   const { user } = useAuth()
+
   const [battle, setBattle] = useState<Battle | null>(null)
+  const [allItems, setAllItems] = useState<SpinItem[]>([])
   const [pageStatus, setPageStatus] = useState<"loading" | "waiting" | "animating" | "done">("loading")
-  const [revealedRound, setRevealedRound] = useState(-1)
+
+  // Spinner state
+  const [spinningRound, setSpinningRound] = useState<number | null>(null)
+  const [revealedRounds, setRevealedRounds] = useState<Set<number>>(new Set())
+  const doneCountRef = useRef(0)        // how many of the 2 spinners in the current round have completed
+  const totalRoundsRef = useRef(0)
+  const animStartedRef = useRef(false)
+
+  // Waiting state UI
   const [copied, setCopied] = useState(false)
   const [cancelling, setCancelling] = useState(false)
-  const animTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
-  const animStartedRef = useRef(false)
+
+  // ── Fetch battle ──
 
   const fetchBattle = useCallback(async () => {
     try {
@@ -115,20 +124,31 @@ export default function BattleRoomPage() {
       const data: Battle = await res.json()
       setBattle(data)
       if (data.status === "completed") {
-        setPageStatus("animating")
+        setPageStatus((prev) => (prev === "animating" || prev === "done" ? prev : "animating"))
       } else if (data.status === "waiting" || data.status === "in_progress") {
-        setPageStatus("waiting")
+        setPageStatus((prev) => (prev === "loading" ? "waiting" : prev))
       } else {
         setPageStatus("done")
       }
     } catch {}
   }, [id])
 
+  // Fetch items for spinner strip
+  useEffect(() => {
+    fetch("/api/admin/items")
+      .then((r) => r.json())
+      .then((data) => {
+        const items = Array.isArray(data) ? data : []
+        setAllItems(items)
+      })
+      .catch(() => {})
+  }, [])
+
   useEffect(() => {
     fetchBattle()
   }, [fetchBattle])
 
-  // Realtime: watch for status change on this battle
+  // ── Realtime: watch for battle status changes ──
   useEffect(() => {
     const supabase = createClient()
     const channel = supabase
@@ -137,8 +157,8 @@ export default function BattleRoomPage() {
         "postgres_changes",
         { event: "UPDATE", schema: "public", table: "battles", filter: `id=eq.${id}` },
         async (payload) => {
-          const newStatus = payload.new?.status
-          if (newStatus === "completed" || newStatus === "cancelled") {
+          const s = payload.new?.status
+          if (s === "completed" || s === "cancelled") {
             await fetchBattle()
           }
         }
@@ -147,33 +167,50 @@ export default function BattleRoomPage() {
     return () => { supabase.removeChannel(channel) }
   }, [id, fetchBattle])
 
-  // Animation
+  // ── Polling fallback while waiting (handles case where realtime doesn't fire) ──
+  useEffect(() => {
+    if (pageStatus !== "waiting") return
+    const interval = setInterval(fetchBattle, 3000)
+    return () => clearInterval(interval)
+  }, [pageStatus, fetchBattle])
+
+  // ── Start animation when pageStatus transitions to "animating" ──
   useEffect(() => {
     if (pageStatus !== "animating" || !battle || animStartedRef.current) return
     animStartedRef.current = true
 
     const rounds = buildRounds(battle.rolls, battle.creator_id)
-    const total = rounds.length
-    if (total === 0) { setPageStatus("done"); return }
+    totalRoundsRef.current = rounds.length
 
-    setRevealedRound(0)
-
-    animTimerRef.current = setInterval(() => {
-      setRevealedRound((prev) => {
-        if (prev >= total - 1) {
-          clearInterval(animTimerRef.current!)
-          setTimeout(() => setPageStatus("done"), 600)
-          return prev
-        }
-        return prev + 1
-      })
-    }, 1500)
-
-    return () => {
-      if (animTimerRef.current) clearInterval(animTimerRef.current)
+    if (rounds.length === 0) {
+      setPageStatus("done")
+      return
     }
+
+    doneCountRef.current = 0
+    setSpinningRound(0)
   }, [pageStatus, battle])
 
+  // ── Handle spinner completion (called when each individual spinner finishes) ──
+  const handleSpinComplete = useCallback((round: number) => {
+    doneCountRef.current += 1
+    if (doneCountRef.current < 2) return // wait for both players' spinners
+
+    doneCountRef.current = 0
+    setRevealedRounds((prev) => new Set([...prev, round]))
+
+    setTimeout(() => {
+      const next = round + 1
+      if (next < totalRoundsRef.current) {
+        setSpinningRound(next)
+      } else {
+        setSpinningRound(null)
+        setTimeout(() => setPageStatus("done"), 400)
+      }
+    }, 700)
+  }, [])
+
+  // ── Cancel battle ──
   const cancelBattle = async () => {
     if (!user || !battle || cancelling) return
     setCancelling(true)
@@ -222,13 +259,15 @@ export default function BattleRoomPage() {
         <p className="text-lg font-bold">Battle Cancelled</p>
         <p className="text-sm text-muted-foreground">Cases were refunded to the creator.</p>
         <Button variant="outline" asChild>
-          <NextLink href="/battles"><ArrowLeft size={14} className="mr-2" />Back to Battles</NextLink>
+          <NextLink href="/battles">
+            <ArrowLeft size={14} className="mr-2" />Back to Battles
+          </NextLink>
         </Button>
       </div>
     )
   }
 
-  // ── Render: waiting ──
+  // ── Render: waiting for opponent ──
   if (pageStatus === "waiting") {
     return (
       <div className="max-w-md mx-auto px-4 py-10 flex flex-col items-center gap-5">
@@ -246,7 +285,9 @@ export default function BattleRoomPage() {
           </Avatar>
           <div className="flex-1 min-w-0">
             <p className="text-sm font-bold truncate">{battle.creator?.username}</p>
-            <p className="text-xs text-muted-foreground">{battle.case_count} case{battle.case_count > 1 ? "s" : ""} ready</p>
+            <p className="text-xs text-muted-foreground">
+              {battle.case_count} case{battle.case_count > 1 ? "s" : ""} ready
+            </p>
           </div>
           <div className="flex items-center gap-1.5 text-xs text-amber-400 font-semibold bg-amber-500/10 rounded-lg px-2.5 py-1.5 shrink-0">
             <Loader2 size={11} className="animate-spin" /> Waiting...
@@ -274,7 +315,10 @@ export default function BattleRoomPage() {
           </Button>
         )}
 
-        <NextLink href="/battles" className="text-xs text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1">
+        <NextLink
+          href="/battles"
+          className="text-xs text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
+        >
           <ArrowLeft size={11} /> Back to lobby
         </NextLink>
       </div>
@@ -295,13 +339,65 @@ export default function BattleRoomPage() {
     .filter((r) => r.user_id !== battle.creator_id)
     .reduce((sum, r) => sum + Number(r.rap), 0)
 
+  // Running RAP up to revealed rounds
+  const creatorVisibleRap = battle.rolls
+    .filter((r) => r.user_id === battle.creator_id && (isDone || revealedRounds.has(r.round)))
+    .reduce((sum, r) => sum + Number(r.rap), 0)
+  const joinerVisibleRap = battle.rolls
+    .filter((r) => r.user_id !== battle.creator_id && (isDone || revealedRounds.has(r.round)))
+    .reduce((sum, r) => sum + Number(r.rap), 0)
+
   const winner = battle.winner_id === battle.creator_id ? battle.creator : battle.joiner
+
+  const renderRound = (round: number, creatorRoll?: BattleRoll, joinerRoll?: BattleRoll) => {
+    const isSpinning = spinningRound === round
+    const isRevealed = isDone || revealedRounds.has(round)
+
+    return (
+      <div key={round} className="grid grid-cols-2 gap-3">
+        {/* Creator side */}
+        <div className="flex justify-center">
+          {isSpinning && creatorRoll && allItems.length > 0 ? (
+            <BattleSpinner
+              items={allItems}
+              targetItem={creatorRoll.items as SpinItem}
+              spinning={true}
+              onComplete={() => handleSpinComplete(round)}
+            />
+          ) : isRevealed && creatorRoll ? (
+            <RevealedCard roll={creatorRoll} />
+          ) : (
+            <PlaceholderCard />
+          )}
+        </div>
+
+        {/* Joiner side */}
+        <div className="flex justify-center">
+          {isSpinning && joinerRoll && allItems.length > 0 ? (
+            <BattleSpinner
+              items={allItems}
+              targetItem={joinerRoll.items as SpinItem}
+              spinning={true}
+              onComplete={() => handleSpinComplete(round)}
+            />
+          ) : isRevealed && joinerRoll ? (
+            <RevealedCard roll={joinerRoll} />
+          ) : (
+            <PlaceholderCard />
+          )}
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-5 space-y-4">
       {/* Header */}
       <div className="flex items-center gap-2">
-        <NextLink href="/battles" className="text-muted-foreground hover:text-foreground transition-colors mr-1">
+        <NextLink
+          href="/battles"
+          className="text-muted-foreground hover:text-foreground transition-colors mr-1"
+        >
           <ArrowLeft size={15} />
         </NextLink>
         <Swords size={15} className="text-primary" />
@@ -311,7 +407,7 @@ export default function BattleRoomPage() {
 
       {/* Winner banner */}
       {isDone && winner && (
-        <div className="flex items-center justify-center gap-3 bg-amber-500/10 border border-amber-500/30 rounded-xl py-3 px-4">
+        <div className="flex items-center justify-center gap-3 bg-amber-500/10 border border-amber-500/30 rounded-xl py-3 px-4 animate-in fade-in duration-500">
           <Trophy size={18} className="text-amber-400" />
           <div className="text-center">
             <p className="text-[0.65rem] text-muted-foreground uppercase tracking-wider font-bold">Winner</p>
@@ -321,14 +417,11 @@ export default function BattleRoomPage() {
         </div>
       )}
 
-      {/* Player headers with running RAP */}
+      {/* Player headers */}
       <div className="grid grid-cols-2 gap-3">
         {([battle.creator, battle.joiner] as (BattleUser | null)[]).map((player, idx) => {
           const isWinner = isDone && player?.id === battle.winner_id
-          const visibleRound = revealedRound
-          const rap = battle.rolls.length > 0
-            ? runningRap(battle.rolls, idx === 0 ? battle.creator_id : (battle.joiner_id ?? ""), visibleRound)
-            : 0
+          const rap = idx === 0 ? (isDone ? creatorTotalRap : creatorVisibleRap) : (isDone ? joinerTotalRap : joinerVisibleRap)
           return (
             <div
               key={idx}
@@ -344,12 +437,14 @@ export default function BattleRoomPage() {
               </Avatar>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-1 flex-wrap">
-                  <p className="text-xs font-bold truncate">{player?.username ?? (idx === 0 ? "Creator" : "Opponent")}</p>
+                  <p className="text-xs font-bold truncate">
+                    {player?.username ?? (idx === 0 ? "Creator" : "Opponent")}
+                  </p>
                   {player?.plus && <Crown size={8} className="text-amber-400 shrink-0" />}
                   {isWinner && <Trophy size={10} className="text-amber-400 shrink-0" />}
                 </div>
-                <p className="text-xs font-bold text-primary tabular-nums">
-                  ${isDone ? (idx === 0 ? creatorTotalRap : joinerTotalRap).toFixed(2) : rap.toFixed(2)}
+                <p className="text-xs font-bold text-primary tabular-nums transition-all">
+                  ${rap.toFixed(2)}
                 </p>
               </div>
             </div>
@@ -357,43 +452,25 @@ export default function BattleRoomPage() {
         })}
       </div>
 
-      {/* Main rounds */}
-      <div className="space-y-2">
-        {mainRounds.map(({ round, creatorRoll, joinerRoll }) => {
-          const revealed = isDone || round <= revealedRound
-          return (
-            <div key={round} className="grid grid-cols-2 gap-3 bg-card/50 border border-border/40 rounded-xl p-3">
-              <ItemCard roll={creatorRoll} revealed={revealed} />
-              <ItemCard roll={joinerRoll} revealed={revealed} />
-            </div>
-          )
-        })}
+      {/* Round rows */}
+      <div className="space-y-3">
+        {mainRounds.map(({ round, creatorRoll, joinerRoll }) =>
+          renderRound(round, creatorRoll, joinerRoll)
+        )}
 
-        {/* Tiebreaker rounds */}
         {tieRounds.length > 0 && (
           <>
             <div className="flex items-center gap-3 py-0.5">
               <div className="flex-1 h-px bg-border/40" />
-              <span className="text-[0.65rem] font-bold text-primary tracking-wider uppercase px-2">Tiebreaker</span>
+              <span className="text-[0.65rem] font-bold text-primary tracking-wider uppercase px-2">
+                Tiebreaker
+              </span>
               <div className="flex-1 h-px bg-border/40" />
             </div>
-            {tieRounds.map(({ round, creatorRoll, joinerRoll }) => {
-              const revealed = isDone || round <= revealedRound
-              return (
-                <div key={round} className="grid grid-cols-2 gap-3 bg-primary/5 border border-primary/20 rounded-xl p-3">
-                  <ItemCard roll={creatorRoll} revealed={revealed} />
-                  <ItemCard roll={joinerRoll} revealed={revealed} />
-                </div>
-              )
-            })}
+            {tieRounds.map(({ round, creatorRoll, joinerRoll }) =>
+              renderRound(round, creatorRoll, joinerRoll)
+            )}
           </>
-        )}
-
-        {/* Waiting for animation */}
-        {!isDone && (
-          <div className="flex justify-center py-2">
-            <Loader2 size={16} className="animate-spin text-muted-foreground" />
-          </div>
         )}
       </div>
     </div>
