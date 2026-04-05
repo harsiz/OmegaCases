@@ -3,65 +3,76 @@ import { createClient } from "@/lib/supabase/server"
 import { createNotification } from "@/lib/notifications"
 
 // POST /api/oauth/spend
-// Body: { client_id, client_secret, user_id, amount }
-// Deducts `amount` from user balance. Amount must be positive (spending only).
+// Body: { token, amount }
+// Deducts amount from authorized user, sends to app owner. Amount must be > 0.
 export async function POST(req: Request) {
-  const { client_id, client_secret, user_id, amount } = await req.json()
+  const { token, amount } = await req.json()
 
-  if (!client_id || !client_secret || !user_id || amount === undefined) {
-    return NextResponse.json({ error: "client_id, client_secret, user_id, and amount required" }, { status: 400 })
+  if (!token || amount === undefined) {
+    return NextResponse.json({ error: "token and amount required" }, { status: 400 })
   }
 
   const spend = Number(amount)
   if (!isFinite(spend) || spend <= 0) {
-    return NextResponse.json({ error: "amount must be a positive number (spend only)" }, { status: 400 })
+    return NextResponse.json({ error: "amount must be a positive number" }, { status: 400 })
   }
 
   const db = await createClient()
 
-  // Verify app credentials and scope
-  const { data: app } = await db
-    .from("oauth_apps")
-    .select("name, scopes")
-    .eq("client_id", client_id)
-    .eq("client_secret", client_secret)
+  // Resolve token → app + user
+  const { data: tok } = await db
+    .from("oauth_tokens")
+    .select("user_id, scopes, app_id, oauth_apps(name, user_id)")
+    .eq("token", token)
     .single()
 
-  if (!app) return NextResponse.json({ error: "Invalid client credentials" }, { status: 401 })
-  if (!app.scopes.includes("spend_balance")) {
-    return NextResponse.json({ error: "App does not have spend_balance scope" }, { status: 403 })
+  if (!tok) return NextResponse.json({ error: "Invalid or revoked token" }, { status: 401 })
+  if (!tok.scopes.includes("spend_balance")) {
+    return NextResponse.json({ error: "Token does not have spend_balance scope" }, { status: 403 })
   }
 
-  // Fetch user
-  const { data: user } = await db
+  const app      = tok.oauth_apps as any
+  const ownerId  = app.user_id as string
+  const appName  = app.name as string
+
+  // Fetch spender balance
+  const { data: spender } = await db
     .from("users")
-    .select("id, balance")
-    .eq("id", user_id)
+    .select("balance")
+    .eq("id", tok.user_id)
     .single()
 
-  if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 })
+  if (!spender) return NextResponse.json({ error: "User not found" }, { status: 404 })
 
-  const currentBalance = Number(user.balance)
-  if (currentBalance < spend) {
+  const currentBal = Number(spender.balance)
+  if (currentBal < spend) {
     return NextResponse.json({ error: "Insufficient balance" }, { status: 402 })
   }
 
-  const newBalance = parseFloat((currentBalance - spend).toFixed(2))
+  const spenderNewBal = parseFloat((currentBal - spend).toFixed(2))
 
-  const { error: updateErr } = await db
-    .from("users")
-    .update({ balance: newBalance })
-    .eq("id", user_id)
+  // Deduct from spender
+  await db.from("users").update({ balance: spenderNewBal }).eq("id", tok.user_id)
 
-  if (updateErr) return NextResponse.json({ error: updateErr.message }, { status: 500 })
+  // Credit app owner (only if owner !== spender)
+  if (ownerId !== tok.user_id) {
+    const { data: owner } = await db.from("users").select("balance").eq("id", ownerId).single()
+    if (owner) {
+      const ownerNewBal = parseFloat((Number(owner.balance) + spend).toFixed(2))
+      await db.from("users").update({ balance: ownerNewBal }).eq("id", ownerId)
+    }
+  }
 
-  // Notify user
+  // Update token last_used_at
+  await db.from("oauth_tokens").update({ last_used_at: new Date().toISOString() }).eq("token", token)
+
+  // Notify spender
   await createNotification({
-    user_id,
+    user_id: tok.user_id,
     type: "oauth_spend",
-    title: `${app.name} spent $${spend.toFixed(2)}`,
-    body: `${app.name} has spent $${spend.toFixed(2)} from your balance.`,
+    title: `${appName} spent $${spend.toFixed(2)}`,
+    body: `${appName} has spent $${spend.toFixed(2)} from your balance.`,
   })
 
-  return NextResponse.json({ ok: true, new_balance: newBalance, spent: spend })
+  return NextResponse.json({ ok: true, spent: spend, new_balance: spenderNewBal })
 }

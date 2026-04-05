@@ -12,7 +12,7 @@ export async function GET(req: NextRequest) {
     .select("*")
     .eq("user_id", user_id)
     .order("created_at", { ascending: false })
-    .limit(100)
+    .limit(10)
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({ notifications: data ?? [] })

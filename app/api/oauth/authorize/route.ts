@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
+import { randomBytes } from "crypto"
 
-// POST /api/oauth/authorize — handle user consent
+// POST /api/oauth/authorize — handle user consent, generate token
 export async function POST(req: Request) {
   const { user_id, client_id, redirect_uri, scope, state, accept } = await req.json()
 
@@ -10,15 +11,16 @@ export async function POST(req: Request) {
   }
 
   if (!accept) {
-    const params = new URLSearchParams({ error: "access_denied" })
-    if (state) params.set("state", state)
-    return NextResponse.json({ redirect_url: `${redirect_uri}?${params}` })
+    const p = new URLSearchParams({ error: "access_denied" })
+    if (state) p.set("state", state)
+    return NextResponse.json({ redirect_url: `${redirect_uri}?${p}` })
   }
 
   const db = await createClient()
+
   const { data: app } = await db
     .from("oauth_apps")
-    .select("scopes")
+    .select("id, scopes")
     .eq("client_id", client_id)
     .single()
 
@@ -36,7 +38,16 @@ export async function POST(req: Request) {
     ? scope.split(",").map((s: string) => s.trim()).filter(Boolean)
     : []
 
-  const params = new URLSearchParams()
+  // Generate persistent token
+  const token = randomBytes(32).toString("hex")
+  await db.from("oauth_tokens").insert({
+    app_id:  app.id,
+    user_id: user_id,
+    token,
+    scopes:  requestedScopes,
+  })
+
+  const params = new URLSearchParams({ token })
   if (state) params.set("state", state)
   if (requestedScopes.includes("read_id"))       params.set("user_id",  userData.id)
   if (requestedScopes.includes("read_username")) params.set("username", userData.username)
