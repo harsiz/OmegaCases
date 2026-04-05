@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from "react"
 import NextLink from "next/link"
 import { usePathname, useRouter } from "next/navigation"
-import { Menu, Layers, Search, Crown, LogOut, User, Settings, ShieldCheck, Store, ArrowLeftRight, Trophy, X, MessageSquare, Cpu, Code2 } from "lucide-react"
+import { Menu, Layers, Search, Crown, LogOut, User, Settings, ShieldCheck, Store, ArrowLeftRight, Trophy, X, MessageSquare, Cpu, Code2, Swords, ChevronDown } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar"
 import { Separator } from "@/components/ui/separator"
@@ -23,7 +23,6 @@ import DepositWithdrawModal from "./deposit-withdraw-modal"
 import NotificationBell from "./notification-bell"
 
 const NAV_LINKS = [
-  { href: "/open",        label: "Cases",       icon: Layers },
   { href: "/marketplace", label: "Marketplace", icon: Store },
   { href: "/trade",       label: "Trade",       icon: ArrowLeftRight },
   { href: "/chat",        label: "Chat",        icon: MessageSquare },
@@ -302,6 +301,33 @@ export default function Navbar() {
 
           {/* Desktop nav */}
           <nav className="hidden md:flex items-center gap-0.5 shrink-0">
+            {/* Cases dropdown */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button className={`relative flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                  isActive("/open") || isActive("/battles")
+                    ? "bg-primary/15 text-primary"
+                    : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                }`}>
+                  <Layers size={14} />
+                  Cases
+                  <ChevronDown size={11} className="opacity-60" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-40 bg-popover border-border/60">
+                <DropdownMenuItem asChild>
+                  <NextLink href="/open" className="flex items-center gap-2 cursor-pointer">
+                    <Layers size={13} /> Open Cases
+                  </NextLink>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <NextLink href="/battles" className="flex items-center gap-2 cursor-pointer">
+                    <Swords size={13} /> Battles
+                  </NextLink>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+
             {NAV_LINKS.map(({ href, label, icon: Icon }) => {
               const active = isActive(href)
               const badge =
@@ -460,6 +486,26 @@ export default function Navbar() {
                 </div>
 
                 <nav className="flex flex-col py-1">
+                  {/* Cases mobile links */}
+                  <NextLink
+                    href="/open"
+                    onClick={() => setMobileOpen(false)}
+                    className={`flex items-center gap-2.5 px-4 py-2.5 text-sm font-medium transition-colors ${
+                      isActive("/open") ? "text-primary bg-primary/10" : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                    }`}
+                  >
+                    <Layers size={15} /> Open Cases
+                  </NextLink>
+                  <NextLink
+                    href="/battles"
+                    onClick={() => setMobileOpen(false)}
+                    className={`flex items-center gap-2.5 px-4 py-2.5 text-sm font-medium transition-colors ${
+                      isActive("/battles") ? "text-primary bg-primary/10" : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                    }`}
+                  >
+                    <Swords size={15} /> Battles
+                  </NextLink>
+
                   {NAV_LINKS.map(({ href, label, icon: Icon }) => {
                     const active = isActive(href)
                     const badge =
