@@ -47,6 +47,10 @@ export default function BattleSpinner({ items, targetItem, spinning, onComplete,
   const lastTickRef = useRef(-1)
   const [strip, setStrip] = useState<SpinItem[]>([])
 
+  // Keep a stable ref so changing onComplete never re-triggers the animation
+  const onCompleteRef = useRef(onComplete)
+  onCompleteRef.current = onComplete
+
   useEffect(() => {
     if (!spinning || items.length === 0) return
 
@@ -86,7 +90,7 @@ export default function BattleSpinner({ items, targetItem, spinning, onComplete,
           if (trackRef.current) {
             trackRef.current.style.transform = `translateX(-${finalOffset}px)`
           }
-          onComplete()
+          onCompleteRef.current()
         }
       }
 
@@ -97,7 +101,9 @@ export default function BattleSpinner({ items, targetItem, spinning, onComplete,
       cancelAnimationFrame(rafSetupRef.current)
       cancelAnimationFrame(animRef.current)
     }
-  }, [spinning, targetItem, items, onComplete, muted])
+  // onComplete intentionally excluded — use ref to avoid restarting animation on re-render
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [spinning, targetItem, items, muted])
 
   return (
     <div

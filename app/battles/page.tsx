@@ -1,9 +1,9 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import NextLink from "next/link"
 import { useRouter } from "next/navigation"
-import { Swords, Users, Plus, Loader2, ChevronRight, Crown, ArrowLeft } from "lucide-react"
+import { Swords, Users, Plus, Loader2, ChevronRight, Crown, ArrowLeft, Pencil } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { useAuth } from "@/lib/auth-context"
@@ -40,7 +40,14 @@ export default function BattlesPage() {
   const [creating, setCreating] = useState(false)
   const [joining, setJoining] = useState<string | null>(null)
   const [selectedCount, setSelectedCount] = useState(1)
+  const [customMode, setCustomMode] = useState(false)
+  const [customInput, setCustomInput] = useState("")
+  const customInputRef = useRef<HTMLInputElement>(null)
   const [joinError, setJoinError] = useState<string | null>(null)
+
+  const effectiveCount = customMode
+    ? Math.max(1, Math.min(50, parseInt(customInput, 10) || 1))
+    : selectedCount
 
   const fetchBattles = useCallback(async () => {
     try {
@@ -74,7 +81,7 @@ export default function BattlesPage() {
       const res = await fetch("/api/battles", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ user_id: user.id, case_count: selectedCount }),
+        body: JSON.stringify({ user_id: user.id, case_count: effectiveCount }),
       })
       const data = res.ok ? await res.json() : null
       if (data?.battle?.id) {
@@ -109,7 +116,7 @@ export default function BattlesPage() {
   }
 
   const casesAvailable = user?.cases_remaining ?? 0
-  const hasEnough = casesAvailable >= selectedCount
+  const hasEnough = casesAvailable >= effectiveCount && effectiveCount >= 1
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-6 space-y-6">
@@ -145,9 +152,9 @@ export default function BattlesPage() {
                   {[1, 3, 5].map((n) => (
                     <button
                       key={n}
-                      onClick={() => setSelectedCount(n)}
+                      onClick={() => { setSelectedCount(n); setCustomMode(false) }}
                       className={`flex-1 py-2 rounded-lg text-sm font-bold border transition-colors ${
-                        selectedCount === n
+                        !customMode && selectedCount === n
                           ? "bg-primary text-primary-foreground border-primary"
                           : "border-border/60 hover:border-primary/40 text-muted-foreground"
                       }`}
@@ -155,13 +162,39 @@ export default function BattlesPage() {
                       {n}
                     </button>
                   ))}
+                  <button
+                    onClick={() => {
+                      setCustomMode(true)
+                      setCustomInput(String(selectedCount))
+                      setTimeout(() => customInputRef.current?.select(), 0)
+                    }}
+                    className={`flex-1 py-2 rounded-lg text-sm font-bold border transition-colors flex items-center justify-center gap-1 ${
+                      customMode
+                        ? "bg-primary text-primary-foreground border-primary"
+                        : "border-border/60 hover:border-primary/40 text-muted-foreground"
+                    }`}
+                  >
+                    <Pencil size={11} />
+                  </button>
                 </div>
+                {customMode && (
+                  <input
+                    ref={customInputRef}
+                    type="number"
+                    min={1}
+                    max={50}
+                    value={customInput}
+                    onChange={(e) => setCustomInput(e.target.value)}
+                    placeholder="e.g. 10"
+                    className="mt-2 w-full bg-muted/60 border border-primary/40 rounded-lg px-3 py-1.5 text-sm text-center font-bold outline-none focus:border-primary transition-colors"
+                  />
+                )}
               </div>
 
               <div className="bg-muted/40 rounded-lg p-3 space-y-1.5">
                 <div className="flex justify-between text-xs">
                   <span className="text-muted-foreground">Cases needed</span>
-                  <span className="font-semibold">{selectedCount}</span>
+                  <span className="font-semibold">{effectiveCount}</span>
                 </div>
                 <div className="flex justify-between text-xs">
                   <span className="text-muted-foreground">Your cases</span>
@@ -181,7 +214,7 @@ export default function BattlesPage() {
 
               {!hasEnough && (
                 <p className="text-xs text-muted-foreground text-center">
-                  Need {selectedCount} cases.{" "}
+                  Need {effectiveCount} cases.{" "}
                   <NextLink href="/open" className="text-primary hover:underline">Get more</NextLink>
                 </p>
               )}

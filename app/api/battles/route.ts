@@ -42,8 +42,8 @@ export async function POST(req: Request) {
 
   const { user_id, case_count } = body
   if (!user_id) return NextResponse.json({ error: "user_id required" }, { status: 400 })
-  if (![1, 3, 5].includes(case_count)) {
-    return NextResponse.json({ error: "case_count must be 1, 3, or 5" }, { status: 400 })
+  if (!Number.isInteger(case_count) || case_count < 1 || case_count > 50) {
+    return NextResponse.json({ error: "case_count must be between 1 and 50" }, { status: 400 })
   }
 
   const { data: user } = await db
