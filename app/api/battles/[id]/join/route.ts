@@ -42,29 +42,40 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const { user_id: newJoinerId } = body
   if (!newJoinerId) return NextResponse.json({ error: "user_id required" }, { status: 400 })
 
-  // Read battle state to decide which slot to fill
+  // Read current battle state
   const { data: existing } = await db.from("battles").select("*").eq("id", id).single()
   if (!existing || existing.status !== "waiting") {
     return NextResponse.json({ error: "Battle is no longer available" }, { status: 409 })
   }
-  if (existing.creator_id === newJoinerId) {
-    return NextResponse.json({ error: "Cannot join your own battle" }, { status: 400 })
-  }
-  if (existing.joiner_id === newJoinerId) {
-    return NextResponse.json({ error: "Already in this battle" }, { status: 400 })
+
+  // Prevent joining own battle or double-join
+  const allCurrentIds = [existing.creator_id, existing.joiner_id, existing.joiner2_id, existing.joiner3_id].filter(Boolean)
+  if (allCurrentIds.includes(newJoinerId)) {
+    return NextResponse.json({ error: existing.creator_id === newJoinerId ? "Cannot join your own battle" : "Already in this battle" }, { status: 400 })
   }
 
   const maxPlayers: number = existing.max_players ?? 2
-  const isThreeWay = maxPlayers === 3
 
-  // Determine if this is the first or second (final) joiner
-  const isFirstJoinerSlot = !existing.joiner_id
-  const isSecondJoinerSlot = isThreeWay && existing.joiner_id && !existing.joiner2_id
-  const isLastJoiner = !isThreeWay || isSecondJoinerSlot
+  // Determine which slot this joiner fills
+  // slot 1 = joiner_id, slot 2 = joiner2_id, slot 3 = joiner3_id
+  let slotToFill: 1 | 2 | 3 | null = null
+  if (!existing.joiner_id) {
+    slotToFill = 1
+  } else if (!existing.joiner2_id && maxPlayers >= 3) {
+    slotToFill = 2
+  } else if (!existing.joiner3_id && maxPlayers >= 4) {
+    slotToFill = 3
+  }
 
-  if (!isFirstJoinerSlot && !isSecondJoinerSlot) {
+  if (slotToFill === null) {
     return NextResponse.json({ error: "Battle is full" }, { status: 409 })
   }
+
+  // Last joiner triggers the roll
+  const isLastJoiner =
+    (maxPlayers === 2 && slotToFill === 1) ||
+    (maxPlayers === 3 && slotToFill === 2) ||
+    (maxPlayers === 4 && slotToFill === 3)
 
   // Validate new joiner has enough cases
   const caseCost = existing.case_count * (existing.exclusive ? 100 : 1)
@@ -74,12 +85,11 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     return NextResponse.json({ error: "Not enough cases" }, { status: 402 })
   }
 
-  // Atomically claim the appropriate slot
+  // Atomically claim the slot
   let battle: typeof existing | null = null
+  const nextStatus = isLastJoiner ? "in_progress" : "waiting"
 
-  if (isFirstJoinerSlot) {
-    // First slot — for 2-way this starts "in_progress", for 3-way stays "waiting"
-    const nextStatus = isThreeWay ? "waiting" : "in_progress"
+  if (slotToFill === 1) {
     const { data: claimed } = await db
       .from("battles")
       .update({ joiner_id: newJoinerId, status: nextStatus })
@@ -88,21 +98,31 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       .is("joiner_id", null)
       .select()
       .single()
-
     if (!claimed) return NextResponse.json({ error: "Battle is no longer available" }, { status: 409 })
     battle = claimed
-  } else {
-    // Second slot (3-way only) — starts rolling
+  } else if (slotToFill === 2) {
     const { data: claimed } = await db
       .from("battles")
-      .update({ joiner2_id: newJoinerId, status: "in_progress" })
+      .update({ joiner2_id: newJoinerId, status: nextStatus })
       .eq("id", id)
       .eq("status", "waiting")
       .not("joiner_id", "is", null)
       .is("joiner2_id", null)
       .select()
       .single()
-
+    if (!claimed) return NextResponse.json({ error: "Battle is no longer available" }, { status: 409 })
+    battle = claimed
+  } else {
+    const { data: claimed } = await db
+      .from("battles")
+      .update({ joiner3_id: newJoinerId, status: nextStatus })
+      .eq("id", id)
+      .eq("status", "waiting")
+      .not("joiner_id", "is", null)
+      .not("joiner2_id", "is", null)
+      .is("joiner3_id", null)
+      .select()
+      .single()
     if (!claimed) return NextResponse.json({ error: "Battle is no longer available" }, { status: 409 })
     battle = claimed
   }
@@ -112,18 +132,18 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     .update({ cases_remaining: joinerUser.cases_remaining - caseCost })
     .eq("id", newJoinerId)
 
-  // If not the last joiner, stop here — waiting for more players
+  // Not the last joiner — wait for more players
   if (!isLastJoiner) {
     return NextResponse.json({ success: true, waiting_for_more: true })
   }
 
   // ── All players joined — roll everything ─────────────────────────────────
 
-  // Build player list (creator first, then joiners in order)
   const playerIds: string[] = [
     battle.creator_id,
     battle.joiner_id!,
-    ...(isThreeWay ? [newJoinerId] : []),
+    ...(maxPlayers >= 3 ? [battle.joiner2_id!] : []),
+    ...(maxPlayers >= 4 ? [battle.joiner3_id!] : []),
   ]
 
   // Fetch item pool
@@ -137,12 +157,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   }
 
   const itemsMap = Object.fromEntries(items.map((i) => [i.id, i]))
-
-  // Per-player RAP tracker
   const playerRaps: Record<string, number> = Object.fromEntries(playerIds.map((pid) => [pid, 0]))
   const allRolls: RollInsert[] = []
 
-  // Main rounds — every player rolls once per round
+  // Main rounds
   for (let r = 0; r < battle.case_count; r++) {
     for (const pid of playerIds) {
       const seed = randomBytes(32).toString("hex")
@@ -176,11 +194,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const maxRap = Math.max(...Object.values(playerRaps))
   const winnerId = playerIds.find((pid) => Math.abs(playerRaps[pid] - maxRap) < 1e-9) ?? battle.creator_id
 
-  // Insert rolls + award all items to winner + complete battle
   await db.from("battle_rolls").insert(allRolls)
   await db.from("inventory").insert(allRolls.map((r) => ({ user_id: winnerId, item_id: r.item_id })))
   await db.from("battles").update({
-    joiner2_id: isThreeWay ? newJoinerId : null,
     winner_id: winnerId,
     status: "completed",
     completed_at: new Date().toISOString(),

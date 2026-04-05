@@ -45,7 +45,7 @@ export default function BattlesPage() {
   const [customMode, setCustomMode] = useState(false)
   const [customInput, setCustomInput] = useState("")
   const [exclusive, setExclusive] = useState(false)
-  const [maxPlayers, setMaxPlayers] = useState<2 | 3>(2)
+  const [maxPlayers, setMaxPlayers] = useState<2 | 3 | 4>(2)
   const customInputRef = useRef<HTMLInputElement>(null)
   const [joinError, setJoinError] = useState<string | null>(null)
 
@@ -86,7 +86,7 @@ export default function BattlesPage() {
       const res = await fetch("/api/battles", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ user_id: user.id, case_count: effectiveCount, exclusive, max_players: maxPlayers }),
+        body: JSON.stringify({ user_id: user.id, case_count: effectiveCount, exclusive, max_players: maxPlayers as number }),
       })
       const data = res.ok ? await res.json() : null
       if (data?.battle?.id) {
@@ -196,21 +196,21 @@ export default function BattlesPage() {
                 )}
               </div>
 
-              {/* Mode: 1v1 or 1v1v1 */}
+              {/* Mode: 1v1 / 1v1v1 / 1v1v1v1 */}
               <div>
                 <p className="text-xs text-muted-foreground mb-2">Battle mode</p>
                 <div className="flex gap-2">
-                  {([2, 3] as const).map((n) => (
+                  {([2, 3, 4] as const).map((n) => (
                     <button
                       key={n}
                       onClick={() => setMaxPlayers(n)}
-                      className={`flex-1 py-2 rounded-lg text-sm font-bold border transition-colors ${
+                      className={`flex-1 py-1.5 rounded-lg text-xs font-bold border transition-colors ${
                         maxPlayers === n
                           ? "bg-primary text-primary-foreground border-primary"
                           : "border-border/60 hover:border-primary/40 text-muted-foreground"
                       }`}
                     >
-                      {n === 2 ? "1v1" : "1v1v1"}
+                      {n === 2 ? "1v1" : n === 3 ? "1v1v1" : "1v1v1v1"}
                     </button>
                   ))}
                 </div>
@@ -327,9 +327,9 @@ export default function BattlesPage() {
                   </div>
 
                   <div className="flex items-center gap-2 shrink-0">
-                    {(battle.max_players ?? 2) === 3 && (
+                    {(battle.max_players ?? 2) > 2 && (
                       <span className="text-[0.6rem] font-bold px-1.5 py-0.5 rounded bg-blue-500/10 border border-blue-500/30 text-blue-400">
-                        1v1v1
+                        {battle.max_players === 3 ? "1v1v1" : "1v1v1v1"}
                       </span>
                     )}
                     <div className={`flex items-center gap-1 rounded-lg px-2.5 py-1 ${battle.exclusive ? "bg-amber-500/10 border border-amber-500/30" : "bg-muted/60"}`}>

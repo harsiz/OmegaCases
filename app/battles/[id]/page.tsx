@@ -49,6 +49,7 @@ interface Battle {
   creator_id: string
   joiner_id: string | null
   joiner2_id: string | null
+  joiner3_id: string | null
   winner_id: string | null
   status: "waiting" | "in_progress" | "completed" | "cancelled"
   case_count: number
@@ -59,6 +60,7 @@ interface Battle {
   creator: BattleUser | null
   joiner: BattleUser | null
   joiner2: BattleUser | null
+  joiner3: BattleUser | null
   rolls: BattleRoll[]
 }
 
@@ -145,7 +147,7 @@ export default function BattleRoomPage() {
   const [revealedRounds, setRevealedRounds] = useState<Set<number>>(new Set())
   const doneCountRef = useRef(0)
   const totalRoundsRef = useRef(0)
-  const spinnerCountRef = useRef(2) // 2 or 3 depending on max_players
+  const spinnerCountRef = useRef(2) // 2, 3, or 4 depending on max_players
   const animStartedRef = useRef(false)
 
   const [copied, setCopied] = useState(false)
@@ -264,20 +266,24 @@ export default function BattleRoomPage() {
   // ── Helpers ──
 
   function getPlayerIds(b: Battle): string[] {
-    return [b.creator_id, b.joiner_id, b.joiner2_id].filter(Boolean) as string[]
+    return [b.creator_id, b.joiner_id, b.joiner2_id, b.joiner3_id].filter(Boolean) as string[]
   }
 
   function getPlayers(b: Battle): (BattleUser | null)[] {
+    const mp = b.max_players ?? 2
     const list: (BattleUser | null)[] = [b.creator, b.joiner]
-    if ((b.max_players ?? 2) === 3) list.push(b.joiner2 ?? null)
+    if (mp >= 3) list.push(b.joiner2 ?? null)
+    if (mp >= 4) list.push(b.joiner3 ?? null)
     return list
   }
 
   function getPlayerIdList(b: Battle): string[] {
+    const mp = b.max_players ?? 2
     const list: string[] = [b.creator_id]
     if (b.joiner_id) list.push(b.joiner_id)
-    if ((b.max_players ?? 2) === 3) list.push(b.joiner2_id ?? "")
-    return list.filter(Boolean)
+    if (mp >= 3 && b.joiner2_id) list.push(b.joiner2_id)
+    if (mp >= 4 && b.joiner3_id) list.push(b.joiner3_id)
+    return list
   }
 
   // ── Loading ──
@@ -297,7 +303,9 @@ export default function BattleRoomPage() {
     )
   }
 
-  const isThreeWay = (battle.max_players ?? 2) === 3
+  const maxPlayers = battle.max_players ?? 2
+  const isThreeWay = maxPlayers === 3
+  const isFourWay = maxPlayers === 4
 
   // ── Cancelled ──
   if (battle.status === "cancelled") {
@@ -323,9 +331,9 @@ export default function BattleRoomPage() {
         <div className="flex items-center gap-2 flex-wrap justify-center">
           <Swords size={18} className={battle.exclusive ? "text-amber-400" : "text-primary"} />
           <h1 className="text-base font-bold">Battle #{battle.id.slice(0, 8)}</h1>
-          {isThreeWay && (
+          {maxPlayers > 2 && (
             <span className="text-[0.6rem] font-bold px-2 py-0.5 rounded-full bg-blue-500/10 border border-blue-500/30 text-blue-400 uppercase">
-              1v1v1
+              {isThreeWay ? "1v1v1" : "1v1v1v1"}
             </span>
           )}
           {battle.exclusive && (
@@ -337,7 +345,7 @@ export default function BattleRoomPage() {
 
         {/* Players joined so far */}
         <div className="w-full space-y-2">
-          {[battle.creator, battle.joiner, ...(isThreeWay ? [battle.joiner2] : [])].map((player, idx) => (
+          {[battle.creator, battle.joiner, ...(maxPlayers >= 3 ? [battle.joiner2] : []), ...(maxPlayers >= 4 ? [battle.joiner3] : [])].map((player, idx) => (
             <div key={idx} className={`flex items-center gap-3 rounded-xl p-3 border ${player ? "bg-card border-border/60" : "bg-muted/20 border-border/30 border-dashed"}`}>
               {player ? (
                 <>
@@ -410,7 +418,7 @@ export default function BattleRoomPage() {
   )
 
   const winner = players.find((p) => p?.id === battle.winner_id) ?? null
-  const colClass = isThreeWay ? "grid-cols-3" : "grid-cols-2"
+  const colClass = isFourWay ? "grid-cols-4" : isThreeWay ? "grid-cols-3" : "grid-cols-2"
 
   const renderRound = (round: number, byPlayer: Record<string, BattleRoll>) => {
     const isSpinning = spinningRound === round
@@ -452,9 +460,9 @@ export default function BattleRoomPage() {
         </NextLink>
         <Swords size={15} className={battle.exclusive ? "text-amber-400" : "text-primary"} />
         <span className="text-sm font-bold">Case Battle</span>
-        {isThreeWay && (
+        {maxPlayers > 2 && (
           <span className="text-[0.6rem] font-bold px-2 py-0.5 rounded-full bg-blue-500/10 border border-blue-500/30 text-blue-400 uppercase">
-            1v1v1
+            {isThreeWay ? "1v1v1" : "1v1v1v1"}
           </span>
         )}
         {battle.exclusive && (

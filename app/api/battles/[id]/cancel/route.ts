@@ -29,11 +29,11 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     await db.from("users").update({ cases_remaining: creator.cases_remaining + caseCost }).eq("id", user_id)
   }
 
-  // Refund joiner1 if they already joined a 3-way battle
-  if (battle.joiner_id) {
-    const { data: joiner } = await db.from("users").select("cases_remaining").eq("id", battle.joiner_id).single()
+  // Refund any joiners who already paid (possible in 3-way/4-way while still "waiting")
+  for (const joinerId of [battle.joiner_id, battle.joiner2_id, battle.joiner3_id].filter(Boolean) as string[]) {
+    const { data: joiner } = await db.from("users").select("cases_remaining").eq("id", joinerId).single()
     if (joiner) {
-      await db.from("users").update({ cases_remaining: joiner.cases_remaining + caseCost }).eq("id", battle.joiner_id)
+      await db.from("users").update({ cases_remaining: joiner.cases_remaining + caseCost }).eq("id", joinerId)
     }
   }
 

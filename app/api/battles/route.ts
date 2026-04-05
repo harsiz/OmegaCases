@@ -41,8 +41,8 @@ export async function POST(req: Request) {
   }
 
   const { user_id, case_count, exclusive = false, max_players = 2 } = body
-  if (![2, 3].includes(max_players)) {
-    return NextResponse.json({ error: "max_players must be 2 or 3" }, { status: 400 })
+  if (![2, 3, 4].includes(max_players)) {
+    return NextResponse.json({ error: "max_players must be 2, 3, or 4" }, { status: 400 })
   }
   if (!user_id) return NextResponse.json({ error: "user_id required" }, { status: 400 })
   if (!Number.isInteger(case_count) || case_count < 1 || case_count > 50) {

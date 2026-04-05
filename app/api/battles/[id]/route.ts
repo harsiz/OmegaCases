@@ -8,7 +8,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const { data: battle } = await db.from("battles").select("*").eq("id", id).single()
   if (!battle) return NextResponse.json({ error: "Battle not found" }, { status: 404 })
 
-  const userIds = [battle.creator_id, battle.joiner_id, battle.joiner2_id].filter(Boolean) as string[]
+  const userIds = [battle.creator_id, battle.joiner_id, battle.joiner2_id, battle.joiner3_id].filter(Boolean) as string[]
   const { data: users } = await db
     .from("users")
     .select("id, username, profile_picture, plus")
@@ -27,6 +27,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     creator: userMap[battle.creator_id] ?? null,
     joiner: battle.joiner_id ? (userMap[battle.joiner_id] ?? null) : null,
     joiner2: battle.joiner2_id ? (userMap[battle.joiner2_id] ?? null) : null,
+    joiner3: battle.joiner3_id ? (userMap[battle.joiner3_id] ?? null) : null,
     rolls: rolls ?? [],
   })
 }
