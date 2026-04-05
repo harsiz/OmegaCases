@@ -21,6 +21,7 @@ interface Battle {
   creator_id: string
   case_count: number
   exclusive: boolean
+  max_players: number
   status: string
   created_at: string
   creator: BattleUser | null
@@ -44,6 +45,7 @@ export default function BattlesPage() {
   const [customMode, setCustomMode] = useState(false)
   const [customInput, setCustomInput] = useState("")
   const [exclusive, setExclusive] = useState(false)
+  const [maxPlayers, setMaxPlayers] = useState<2 | 3>(2)
   const customInputRef = useRef<HTMLInputElement>(null)
   const [joinError, setJoinError] = useState<string | null>(null)
 
@@ -84,7 +86,7 @@ export default function BattlesPage() {
       const res = await fetch("/api/battles", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ user_id: user.id, case_count: effectiveCount, exclusive }),
+        body: JSON.stringify({ user_id: user.id, case_count: effectiveCount, exclusive, max_players: maxPlayers }),
       })
       const data = res.ok ? await res.json() : null
       if (data?.battle?.id) {
@@ -194,6 +196,26 @@ export default function BattlesPage() {
                 )}
               </div>
 
+              {/* Mode: 1v1 or 1v1v1 */}
+              <div>
+                <p className="text-xs text-muted-foreground mb-2">Battle mode</p>
+                <div className="flex gap-2">
+                  {([2, 3] as const).map((n) => (
+                    <button
+                      key={n}
+                      onClick={() => setMaxPlayers(n)}
+                      className={`flex-1 py-2 rounded-lg text-sm font-bold border transition-colors ${
+                        maxPlayers === n
+                          ? "bg-primary text-primary-foreground border-primary"
+                          : "border-border/60 hover:border-primary/40 text-muted-foreground"
+                      }`}
+                    >
+                      {n === 2 ? "1v1" : "1v1v1"}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               {/* Exclusives toggle */}
               <button
                 onClick={() => setExclusive((e) => !e)}
@@ -225,7 +247,7 @@ export default function BattlesPage() {
                   <span className="font-semibold">
                     {caseCost}
                     {exclusive && caseCost !== effectiveCount && (
-                      <span className="text-muted-foreground font-normal"> ({effectiveCount}×50)</span>
+                      <span className="text-muted-foreground font-normal"> ({effectiveCount}×100)</span>
                     )}
                   </span>
                 </div>
@@ -305,6 +327,11 @@ export default function BattlesPage() {
                   </div>
 
                   <div className="flex items-center gap-2 shrink-0">
+                    {(battle.max_players ?? 2) === 3 && (
+                      <span className="text-[0.6rem] font-bold px-1.5 py-0.5 rounded bg-blue-500/10 border border-blue-500/30 text-blue-400">
+                        1v1v1
+                      </span>
+                    )}
                     <div className={`flex items-center gap-1 rounded-lg px-2.5 py-1 ${battle.exclusive ? "bg-amber-500/10 border border-amber-500/30" : "bg-muted/60"}`}>
                       {battle.exclusive && <span className="text-[0.6rem]">👑</span>}
                       <Swords size={10} className={battle.exclusive ? "text-amber-400" : "text-muted-foreground"} />

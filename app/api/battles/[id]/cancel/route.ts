@@ -6,11 +6,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const db = await createClient()
 
   let body: { user_id: string }
-  try {
-    body = await req.json()
-  } catch {
-    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 })
-  }
+  try { body = await req.json() }
+  catch { return NextResponse.json({ error: "Invalid JSON" }, { status: 400 }) }
 
   const { user_id } = body
   if (!user_id) return NextResponse.json({ error: "user_id required" }, { status: 400 })
@@ -24,13 +21,20 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     return NextResponse.json({ error: "Battle cannot be cancelled" }, { status: 409 })
   }
 
-  // Refund cases to creator
+  const caseCost = battle.case_count * (battle.exclusive ? 100 : 1)
+
+  // Refund creator
   const { data: creator } = await db.from("users").select("cases_remaining").eq("id", user_id).single()
   if (creator) {
-    await db
-      .from("users")
-      .update({ cases_remaining: creator.cases_remaining + battle.case_count })
-      .eq("id", user_id)
+    await db.from("users").update({ cases_remaining: creator.cases_remaining + caseCost }).eq("id", user_id)
+  }
+
+  // Refund joiner1 if they already joined a 3-way battle
+  if (battle.joiner_id) {
+    const { data: joiner } = await db.from("users").select("cases_remaining").eq("id", battle.joiner_id).single()
+    if (joiner) {
+      await db.from("users").update({ cases_remaining: joiner.cases_remaining + caseCost }).eq("id", battle.joiner_id)
+    }
   }
 
   await db.from("battles").update({ status: "cancelled" }).eq("id", id)

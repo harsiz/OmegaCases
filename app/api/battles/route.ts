@@ -7,7 +7,7 @@ export async function GET() {
 
   const { data: battles } = await db
     .from("battles")
-    .select("id, creator_id, case_count, created_at, status, exclusive")
+    .select("id, creator_id, case_count, created_at, status, exclusive, max_players")
     .eq("status", "waiting")
     .order("created_at", { ascending: false })
     .limit(50)
@@ -33,14 +33,17 @@ export async function GET() {
 export async function POST(req: Request) {
   const db = await createClient()
 
-  let body: { user_id: string; case_count: number; exclusive?: boolean }
+  let body: { user_id: string; case_count: number; exclusive?: boolean; max_players?: number }
   try {
     body = await req.json()
   } catch {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 })
   }
 
-  const { user_id, case_count, exclusive = false } = body
+  const { user_id, case_count, exclusive = false, max_players = 2 } = body
+  if (![2, 3].includes(max_players)) {
+    return NextResponse.json({ error: "max_players must be 2 or 3" }, { status: 400 })
+  }
   if (!user_id) return NextResponse.json({ error: "user_id required" }, { status: 400 })
   if (!Number.isInteger(case_count) || case_count < 1 || case_count > 50) {
     return NextResponse.json({ error: "case_count must be between 1 and 50" }, { status: 400 })
@@ -68,7 +71,7 @@ export async function POST(req: Request) {
 
   const { data: battle, error: battleErr } = await db
     .from("battles")
-    .insert({ creator_id: user_id, case_count, exclusive, status: "waiting" })
+    .insert({ creator_id: user_id, case_count, exclusive, max_players, status: "waiting" })
     .select()
     .single()
 

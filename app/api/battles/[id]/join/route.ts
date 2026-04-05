@@ -36,58 +36,97 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const db = await createClient()
 
   let body: { user_id: string }
-  try {
-    body = await req.json()
-  } catch {
-    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 })
-  }
+  try { body = await req.json() }
+  catch { return NextResponse.json({ error: "Invalid JSON" }, { status: 400 }) }
 
-  const { user_id: joiner_id } = body
-  if (!joiner_id) return NextResponse.json({ error: "user_id required" }, { status: 400 })
+  const { user_id: newJoinerId } = body
+  if (!newJoinerId) return NextResponse.json({ error: "user_id required" }, { status: 400 })
 
-  // Atomically claim the battle (only succeeds if status is 'waiting')
-  const { data: battle, error: claimErr } = await db
-    .from("battles")
-    .update({ joiner_id, status: "in_progress" })
-    .eq("id", id)
-    .eq("status", "waiting")
-    .select()
-    .single()
-
-  if (!battle || claimErr) {
+  // Read battle state to decide which slot to fill
+  const { data: existing } = await db.from("battles").select("*").eq("id", id).single()
+  if (!existing || existing.status !== "waiting") {
     return NextResponse.json({ error: "Battle is no longer available" }, { status: 409 })
   }
-
-  if (battle.creator_id === joiner_id) {
-    await db.from("battles").update({ joiner_id: null, status: "waiting" }).eq("id", id)
+  if (existing.creator_id === newJoinerId) {
     return NextResponse.json({ error: "Cannot join your own battle" }, { status: 400 })
   }
-
-  const { data: joiner } = await db
-    .from("users")
-    .select("id, cases_remaining")
-    .eq("id", joiner_id)
-    .single()
-
-  if (!joiner) {
-    await db.from("battles").update({ joiner_id: null, status: "waiting" }).eq("id", id)
-    return NextResponse.json({ error: "User not found" }, { status: 404 })
+  if (existing.joiner_id === newJoinerId) {
+    return NextResponse.json({ error: "Already in this battle" }, { status: 400 })
   }
 
-  const caseCost = battle.case_count * (battle.exclusive ? 100 : 1)
+  const maxPlayers: number = existing.max_players ?? 2
+  const isThreeWay = maxPlayers === 3
 
-  if ((joiner.cases_remaining ?? 0) < caseCost) {
-    await db.from("battles").update({ joiner_id: null, status: "waiting" }).eq("id", id)
+  // Determine if this is the first or second (final) joiner
+  const isFirstJoinerSlot = !existing.joiner_id
+  const isSecondJoinerSlot = isThreeWay && existing.joiner_id && !existing.joiner2_id
+  const isLastJoiner = !isThreeWay || isSecondJoinerSlot
+
+  if (!isFirstJoinerSlot && !isSecondJoinerSlot) {
+    return NextResponse.json({ error: "Battle is full" }, { status: 409 })
+  }
+
+  // Validate new joiner has enough cases
+  const caseCost = existing.case_count * (existing.exclusive ? 100 : 1)
+  const { data: joinerUser } = await db.from("users").select("cases_remaining").eq("id", newJoinerId).single()
+  if (!joinerUser) return NextResponse.json({ error: "User not found" }, { status: 404 })
+  if ((joinerUser.cases_remaining ?? 0) < caseCost) {
     return NextResponse.json({ error: "Not enough cases" }, { status: 402 })
   }
 
-  // Deduct cases from joiner
-  await db
-    .from("users")
-    .update({ cases_remaining: joiner.cases_remaining - caseCost })
-    .eq("id", joiner_id)
+  // Atomically claim the appropriate slot
+  let battle: typeof existing | null = null
 
-  // Fetch items for rolling — Exclusives mode restricts to Legendary & Omega only
+  if (isFirstJoinerSlot) {
+    // First slot — for 2-way this starts "in_progress", for 3-way stays "waiting"
+    const nextStatus = isThreeWay ? "waiting" : "in_progress"
+    const { data: claimed } = await db
+      .from("battles")
+      .update({ joiner_id: newJoinerId, status: nextStatus })
+      .eq("id", id)
+      .eq("status", "waiting")
+      .is("joiner_id", null)
+      .select()
+      .single()
+
+    if (!claimed) return NextResponse.json({ error: "Battle is no longer available" }, { status: 409 })
+    battle = claimed
+  } else {
+    // Second slot (3-way only) — starts rolling
+    const { data: claimed } = await db
+      .from("battles")
+      .update({ joiner2_id: newJoinerId, status: "in_progress" })
+      .eq("id", id)
+      .eq("status", "waiting")
+      .not("joiner_id", "is", null)
+      .is("joiner2_id", null)
+      .select()
+      .single()
+
+    if (!claimed) return NextResponse.json({ error: "Battle is no longer available" }, { status: 409 })
+    battle = claimed
+  }
+
+  // Deduct cases from new joiner
+  await db.from("users")
+    .update({ cases_remaining: joinerUser.cases_remaining - caseCost })
+    .eq("id", newJoinerId)
+
+  // If not the last joiner, stop here — waiting for more players
+  if (!isLastJoiner) {
+    return NextResponse.json({ success: true, waiting_for_more: true })
+  }
+
+  // ── All players joined — roll everything ─────────────────────────────────
+
+  // Build player list (creator first, then joiners in order)
+  const playerIds: string[] = [
+    battle.creator_id,
+    battle.joiner_id!,
+    ...(isThreeWay ? [newJoinerId] : []),
+  ]
+
+  // Fetch item pool
   const itemsQuery = db.from("items").select("id, likelihood, market_price").eq("limited_time", false)
   const { data: items } = battle.exclusive
     ? await itemsQuery.in("rarity", ["Legendary", "Omega"])
@@ -99,64 +138,53 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
   const itemsMap = Object.fromEntries(items.map((i) => [i.id, i]))
 
+  // Per-player RAP tracker
+  const playerRaps: Record<string, number> = Object.fromEntries(playerIds.map((pid) => [pid, 0]))
   const allRolls: RollInsert[] = []
-  let creatorRap = 0
-  let joinerRap = 0
 
-  // Main rounds
+  // Main rounds — every player rolls once per round
   for (let r = 0; r < battle.case_count; r++) {
-    const cSeed = randomBytes(32).toString("hex")
-    const jSeed = randomBytes(32).toString("hex")
-    const cFloat = fairFloat(cSeed, "battle", 0)
-    const jFloat = fairFloat(jSeed, "battle", 0)
-    const cItemId = rollItem(items, cFloat)
-    const jItemId = rollItem(items, jFloat)
-    const cRap = Number(itemsMap[cItemId].market_price)
-    const jRap = Number(itemsMap[jItemId].market_price)
-
-    allRolls.push({ battle_id: id, user_id: battle.creator_id, item_id: cItemId, round: r, roll_index: allRolls.length, rap: cRap, float: cFloat, server_seed: cSeed, client_seed: "battle", nonce: 0 })
-    allRolls.push({ battle_id: id, user_id: joiner_id, item_id: jItemId, round: r, roll_index: allRolls.length, rap: jRap, float: jFloat, server_seed: jSeed, client_seed: "battle", nonce: 0 })
-
-    creatorRap += cRap
-    joinerRap += jRap
+    for (const pid of playerIds) {
+      const seed = randomBytes(32).toString("hex")
+      const float = fairFloat(seed, "battle", 0)
+      const itemId = rollItem(items, float)
+      const rap = Number(itemsMap[itemId].market_price)
+      allRolls.push({ battle_id: id, user_id: pid, item_id: itemId, round: r, roll_index: allRolls.length, rap, float, server_seed: seed, client_seed: "battle", nonce: 0 })
+      playerRaps[pid] += rap
+    }
   }
 
-  // Tiebreakers — keep rolling until RAPs differ (max 10 extra rounds)
+  // Tiebreakers — only tied-for-first players re-roll (max 10 extra rounds)
   let tieRound = battle.case_count
-  while (Math.abs(creatorRap - joinerRap) < 1e-9 && tieRound - battle.case_count < 10) {
-    const cSeed = randomBytes(32).toString("hex")
-    const jSeed = randomBytes(32).toString("hex")
-    const cFloat = fairFloat(cSeed, "battle", 0)
-    const jFloat = fairFloat(jSeed, "battle", 0)
-    const cItemId = rollItem(items, cFloat)
-    const jItemId = rollItem(items, jFloat)
-    const cRap = Number(itemsMap[cItemId].market_price)
-    const jRap = Number(itemsMap[jItemId].market_price)
+  while (tieRound - battle.case_count < 10) {
+    const maxRap = Math.max(...Object.values(playerRaps))
+    const tied = playerIds.filter((pid) => Math.abs(playerRaps[pid] - maxRap) < 1e-9)
+    if (tied.length === 1) break
 
-    allRolls.push({ battle_id: id, user_id: battle.creator_id, item_id: cItemId, round: tieRound, roll_index: allRolls.length, rap: cRap, float: cFloat, server_seed: cSeed, client_seed: "battle", nonce: 0 })
-    allRolls.push({ battle_id: id, user_id: joiner_id, item_id: jItemId, round: tieRound, roll_index: allRolls.length, rap: jRap, float: jFloat, server_seed: jSeed, client_seed: "battle", nonce: 0 })
-
-    creatorRap += cRap
-    joinerRap += jRap
+    for (const pid of tied) {
+      const seed = randomBytes(32).toString("hex")
+      const float = fairFloat(seed, "battle", 0)
+      const itemId = rollItem(items, float)
+      const rap = Number(itemsMap[itemId].market_price)
+      allRolls.push({ battle_id: id, user_id: pid, item_id: itemId, round: tieRound, roll_index: allRolls.length, rap, float, server_seed: seed, client_seed: "battle", nonce: 0 })
+      playerRaps[pid] += rap
+    }
     tieRound++
   }
 
-  // Creator wins all ties
-  const winnerId = creatorRap >= joinerRap ? battle.creator_id : joiner_id
+  // Winner = highest RAP (creator wins on perfect tie)
+  const maxRap = Math.max(...Object.values(playerRaps))
+  const winnerId = playerIds.find((pid) => Math.abs(playerRaps[pid] - maxRap) < 1e-9) ?? battle.creator_id
 
-  // Insert rolls
+  // Insert rolls + award all items to winner + complete battle
   await db.from("battle_rolls").insert(allRolls)
-
-  // Award ALL items to winner
-  await db
-    .from("inventory")
-    .insert(allRolls.map((r) => ({ user_id: winnerId, item_id: r.item_id })))
-
-  // Mark battle complete
-  await db
-    .from("battles")
-    .update({ winner_id: winnerId, status: "completed", completed_at: new Date().toISOString() })
-    .eq("id", id)
+  await db.from("inventory").insert(allRolls.map((r) => ({ user_id: winnerId, item_id: r.item_id })))
+  await db.from("battles").update({
+    joiner2_id: isThreeWay ? newJoinerId : null,
+    winner_id: winnerId,
+    status: "completed",
+    completed_at: new Date().toISOString(),
+  }).eq("id", id)
 
   return NextResponse.json({ success: true, winner_id: winnerId })
 }
