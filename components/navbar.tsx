@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from "react"
 import NextLink from "next/link"
 import { usePathname, useRouter } from "next/navigation"
-import { Menu, Layers, Search, Crown, LogOut, User, Settings, ShieldCheck, Store, ArrowLeftRight, Trophy, X, MessageSquare, Cpu, Code2, Swords, ChevronDown } from "lucide-react"
+import { Menu, Layers, Search, Crown, LogOut, User, Settings, ShieldCheck, Store, ArrowLeftRight, Trophy, X, MessageSquare, Cpu, Code2, Swords, ChevronDown, ArrowUpRight } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar"
 import { Separator } from "@/components/ui/separator"
@@ -360,6 +360,15 @@ export default function Navbar() {
             >
               <Crown size={14} /> Plus
             </NextLink>
+            <a
+              href="https://exchange.omegacases.com/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1 px-2.5 py-1.5 rounded-md text-sm font-bold transition-colors hover:bg-muted"
+            >
+              <span className="exchange-shimmer-text">Exchange</span>
+              <ArrowUpRight size={11} className="text-emerald-400 shrink-0" />
+            </a>
           </nav>
 
           {/* Search — grows to fill center space */}
@@ -533,6 +542,16 @@ export default function Navbar() {
                   <NextLink href="/plus" onClick={() => setMobileOpen(false)} className="flex items-center gap-2.5 px-4 py-2.5 text-sm font-bold text-amber-400 hover:bg-amber-500/10 transition-colors">
                     <Crown size={15} /> Plus
                   </NextLink>
+                  <a
+                    href="https://exchange.omegacases.com/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={() => setMobileOpen(false)}
+                    className="flex items-center gap-2.5 px-4 py-2.5 text-sm font-bold hover:bg-muted transition-colors"
+                  >
+                    <ArrowUpRight size={15} className="text-emerald-400 shrink-0" />
+                    <span className="exchange-shimmer-text">Exchange</span>
+                  </a>
                 </nav>
 
                 {mounted && user && (
